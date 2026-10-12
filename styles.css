@@ -123,7 +123,7 @@ code {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.btn-run .icon { fill: currentColor; stroke-width: 1.5; }
+.icon-fill { fill: currentColor; stroke-width: 1.5; }
 
 /* ---------- Buttons ---------- */
 
@@ -448,7 +448,7 @@ body.is-resizing iframe { pointer-events: none; }
 
 /* ---------- Preview ---------- */
 
-.run-status { font-size: 0.85rem; color: var(--text-muted); margin-right: 4px; }
+.run-status { font-size: 0.85rem; color: var(--text-muted); }
 .run-status.is-attention { color: var(--warn-text); background: var(--warn-bg); border-radius: 999px; padding: 0.2em 0.7em; font-weight: 600; }
 
 .frame-host {
@@ -676,10 +676,7 @@ body.is-expanded .pane-preview {
   }
   .pane-actions { width: 100%; flex-wrap: nowrap; gap: 4px; }
   .pane-code .pane-actions .btn { flex: 1 1 0; min-width: 0; padding: 0.4em 0.3em; gap: 0.3em; }
-  .pane-preview .pane-actions { flex-wrap: wrap; justify-content: flex-end; }
-  .pane-preview .pane-actions .switch { margin-right: auto; }
-  .run-status:not(.is-attention) { display: none; }
-  .run-status.is-attention { order: 10; flex-basis: 100%; text-align: center; margin: 0; }
+  .pane-preview .pane-actions .btn { flex: 1 1 0; }
   .btn { min-height: 40px; padding: 0.4em 0.75em; }
   .long-label { display: none; }
   .desktop-only { display: none; }

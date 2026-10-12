@@ -188,6 +188,10 @@ await test('1. First visit shows the empty state and loads without errors', asyn
   assert(await page.isVisible('#previewEmpty'), 'empty preview message visible');
   assert(await page.inputValue('#editor') === '', 'editor starts empty');
   assert(await page.$('#frameHost iframe') === null, 'no preview iframe while empty');
+  for (const id of ['copyBtn', 'clearBtn', 'runBtn', 'fullscreenBtn']) {
+    assert(await page.isDisabled('#' + id), id + ' is disabled until there is code');
+  }
+  assert(await page.isEnabled('#downloadBtn') && await page.isEnabled('#pasteBtn') && await page.isEnabled('#sampleBtn'), 'main actions available');
   { const errs = await parentErrors(page, problems); assert(errs.length === 0, 'no console errors: ' + errs.join('; ')); }
   await page.screenshot({ path: path.join(OUT, 'empty.png') });
   await context.close();
@@ -626,23 +630,41 @@ await test('9b. Keyboard focus stays in the editor when a creation grabs focus o
   await context.close();
 });
 
-await test('9c. Paste helper: chat text / ``` fences, React code, and non-HTML', async () => {
+await test('9c. Paste helper: chat text / ``` fences, React code, partial copies, and non-HTML', async () => {
   const { context, page } = await openApp();
-  await pasteCode(page, 'Here is your app!\n```html\n<!DOCTYPE html>\n<html><body><h1 id="z">Fenced</h1></body></html>\n```\nLet me know if you want changes.');
-  await page.waitForSelector('#hint:not([hidden])');
-  assert((await page.textContent('#hintText')).includes('extra text'), 'extra text noticed');
-  await page.click('#hintAction');
+  const chat = 'Here is your app!\n```html\n<!DOCTYPE html>\n<html><body><h1 id="z">Fenced</h1></body></html>\n```\nLet me know if you want changes.';
+  await pasteCode(page, chat);
+  await page.waitForFunction(() => document.getElementById('editor').value.startsWith('<!DOCTYPE html>'));
   const cleaned = await page.inputValue('#editor');
-  assert(cleaned.startsWith('<!DOCTYPE html>') && cleaned.trim().endsWith('</html>'), 'cleaned: ' + JSON.stringify(cleaned));
-  assert(await page.isHidden('#hint'), 'hint gone');
-  const frame = await previewFrame(page);
+  assert(cleaned.startsWith('<!DOCTYPE html>') && cleaned.trim().endsWith('</html>'), 'chat text removed on paste: ' + JSON.stringify(cleaned));
+  assert((await page.textContent('#toastText')).includes("Removed Gemini's chat text"), 'explained: ' + await page.textContent('#toastText'));
+  assert(await page.isHidden('#hint'), 'no hint needed after cleaning');
+  let frame = await previewFrame(page);
   assert(await frame.evaluate(() => document.compatMode) === 'CSS1Compat', 'standards mode after cleaning');
+  await page.click('#toastAction');
+  assert(await page.inputValue('#editor') === chat, 'undo brings back exactly what was pasted');
+  await page.waitForSelector('#hint:not([hidden])');
+  assert((await page.textContent('#hintText')).includes('chat message'), 'hint offers the clean-up again');
+  await page.click('#hintAction');
+  assert((await page.inputValue('#editor')).startsWith('<!DOCTYPE html>'), 'Clean it up button works');
+
+  await pasteCode(page, '<!DOCTYPE html>\n<html>\n<head><title>Quiz</title></head>\n<body>\n<h1>Quiz</h1>\n<script>\nconst questions = [');
+  await page.waitForSelector('#hint:not([hidden])');
+  assert((await page.textContent('#hintText')).includes('end of the code seems to be missing'), 'cut-off code noticed');
+  await page.click('#hintAction');
+  assert((await page.evaluate(() => navigator.clipboard.readText())).includes('complete HTML file again'), 'request for the full file copied');
+
+  await pasteCode(page, '  <button onclick="go()">Go</button>\n</body>\n</html>');
+  await page.waitForSelector('#hint:not([hidden])');
+  assert((await page.textContent('#hintText')).includes('only part of the code'), 'partial copy noticed');
 
   await pasteCode(page, "import React, { useState } from 'react';\n\nexport default function App() {\n  const [n, setN] = useState(0);\n  return <button onClick={() => setN(n + 1)}>{n}</button>;\n}\n");
   await page.waitForSelector('#hint:not([hidden])');
   assert((await page.textContent('#hintText')).includes('React'), 'React noticed');
   await page.click('#hintAction');
   assert((await page.evaluate(() => navigator.clipboard.readText())).includes('one complete HTML file'), 'request for Gemini copied');
+  assert(await page.isVisible('#previewNotice'), 'preview explains that React cannot run here');
+  assert(await page.$('#frameHost iframe') === null, 'React source is not run as a page');
 
   await pasteCode(page, 'body { color: red; }\n.box { padding: 4px; }');
   await page.waitForSelector('#hint:not([hidden])');
@@ -653,6 +675,34 @@ await test('9c. Paste helper: chat text / ``` fences, React code, and non-HTML',
   await pasteCode(page, FEATURE_DOC);
   await wait(200);
   assert(await page.isHidden('#hint'), 'no hint for a normal document');
+  await context.close();
+});
+
+await test('9f. Pasting a new version into old code replaces it (instead of mixing the two)', async () => {
+  const { context, page } = await openApp();
+  const v1 = '<!DOCTYPE html>\n<html>\n<body>\n<h1 id="v">One</h1>\n</body>\n</html>\n';
+  const v2 = '<!DOCTYPE html>\n<html>\n<body>\n<h1 id="v">Two</h1>\n</body>\n</html>\n';
+  await setCode(page, v1);
+  await wait(1200);
+  // Click into the middle of the old code (no select-all) and paste the new version.
+  await page.evaluate((text) => navigator.clipboard.writeText(text), v2);
+  await page.click('#editor');
+  await page.evaluate(() => document.getElementById('editor').setSelectionRange(20, 20));
+  const before = await runs(page);
+  await page.keyboard.press('Control+V');
+  assert(await page.inputValue('#editor') === v2, 'old code replaced, not mixed: ' + JSON.stringify(await page.inputValue('#editor')));
+  const frame = await previewFrame(page, 3000, before);
+  assert(await frame.textContent('#v') === 'Two', 'new version runs right away');
+  assert((await page.textContent('#toastText')).includes('Replaced your old code'), 'explained with undo');
+  await page.click('#toastAction');
+  assert(await page.inputValue('#editor') === v1, 'undo restores the old version');
+
+  // Pasting a small piece (not a whole page) still inserts at the cursor.
+  await page.evaluate((text) => navigator.clipboard.writeText(text), '<p>extra</p>');
+  await page.click('#editor');
+  await page.evaluate(() => { const e = document.getElementById('editor'); const i = e.value.indexOf('</body>'); e.setSelectionRange(i, i); });
+  await page.keyboard.press('Control+V');
+  assert((await page.inputValue('#editor')).includes('<p>extra</p></body>'), 'snippet inserted at the cursor');
   await context.close();
 });
 

@@ -34,8 +34,9 @@
   // Browser features the preview may use. Camera, microphone and location are not granted.
   var ALLOW = 'fullscreen; clipboard-write; autoplay';
 
-  var PROMPT_TIP = "Make it a single HTML file with all of the CSS and JavaScript inside it. Don't use React or any build tools. Give me the complete file in one code block.";
+  var PROMPT_TIP = "Make it a single HTML file with all of the CSS and JavaScript inside it. Don't use React, Tailwind, or other outside libraries. Give me the complete file in one code block.";
   var REWRITE_REQUEST = 'Please rewrite this as one complete HTML file that I can open directly in a web browser. Put all of the CSS and JavaScript inside the same file, and do not use React, imports, or any build tools.';
+  var COMPLETE_REQUEST = 'Your code was cut off. Please give me the complete HTML file again, from <!DOCTYPE html> all the way to </html>, in one code block.';
 
   var SAMPLE = [
     '<!DOCTYPE html>',
@@ -297,6 +298,8 @@
   var frameHost = $('frameHost');
   var previewEmpty = $('previewEmpty');
   var runBtn = $('runBtn');
+  var runBtnLabel = $('runBtnLabel');
+  var previewNotice = $('previewNotice');
   var runStatus = $('runStatus');
   var autoRunToggle = $('autoRunToggle');
   var wrapToggle = $('wrapToggle');
@@ -516,6 +519,11 @@
 
   function updateEmptyState() {
     editorWrap.classList.toggle('has-code', editor.value.length > 0);
+    var empty = !hasCode();
+    $('copyBtn').disabled = empty;
+    $('clearBtn').disabled = editor.value.length === 0;
+    runBtn.disabled = empty;
+    fullscreenBtn.disabled = empty && !fullscreenElement() && !body.classList.contains('is-expanded');
   }
 
   function updateEditorStatus() {
@@ -553,14 +561,14 @@
   // Replace everything in the editor (Paste button, Sample, Clear, Undo).
   function replaceCode(text, options) {
     options = options || {};
-    var previous = editor.value;
+    var undoValue = typeof options.undoValue === 'string' ? options.undoValue : editor.value;
     editor.value = text;
     editor.scrollTop = 0;
     editor.scrollLeft = 0;
     state.hintDismissedFor = null;
     onCodeChanged({ runNow: true, analyze: true });
-    if (options.undoMessage && previous.trim() && previous !== text) {
-      state.undoValue = previous;
+    if (options.undoMessage && undoValue.trim() && undoValue !== text) {
+      state.undoValue = undoValue;
       toast(options.undoMessage, {
         actionLabel: 'Undo',
         onAction: function () {
@@ -721,12 +729,19 @@
     removeFrame();
     clearPending(oldRunId);
 
+    previewNotice.hidden = true;
     if (!code.trim()) {
       state.runId = null;
       previewEmpty.hidden = false;
       return;
     }
     previewEmpty.hidden = true;
+    // React/JSX source shows up as a wall of text in a browser, so explain instead.
+    if (analyzeCode(code) === 'react') {
+      state.runId = null;
+      previewNotice.hidden = false;
+      return;
+    }
 
     var runId = newRunId();
     state.runId = runId;
@@ -764,6 +779,9 @@
 
   function updateRunIndicators() {
     var waiting = !state.autoRun && isDirty();
+    // While the preview updates by itself, the button only restarts it, so keep it quiet.
+    runBtnLabel.textContent = state.autoRun ? 'Restart' : 'Run';
+    runBtn.classList.toggle('btn-run', !state.autoRun);
     runBtn.classList.toggle('is-waiting', waiting);
     clearTimeout(timers.runStatus);
     if (waiting) {
@@ -955,9 +973,11 @@
       var before = start > 0 ? stripComments(text.slice(0, start)) : '';
       var after = end >= 0 ? stripComments(text.slice(end + 7)) : '';
       if (before || after) { return 'extra-text'; }
+      if (end < 0 && /<body[\s>]/i.test(text)) { return 'cut-off'; }
       return null;
     }
     if (/^```/.test(text) || /```$/.test(text)) { return 'extra-text'; }
+    if (/<\/(body|html)>/i.test(text)) { return 'partial'; }
     if (/^\s*import\s[^\n]*from\s*['"]|^\s*export\s+default\b|\bReactDOM\b|\buseState\s*\(/m.test(text) && !/<script[\s>]/i.test(text)) {
       return 'react';
     }
@@ -987,11 +1007,17 @@
     }
     hint.dataset.kind = kind;
     if (kind === 'extra-text') {
-      hintText.textContent = 'It looks like some extra text (like ``` marks or chat words) was copied along with the code.';
+      hintText.textContent = "Some of Gemini's chat message was copied along with the code.";
       hintAction.textContent = 'Clean it up';
     } else if (kind === 'react') {
       hintText.textContent = 'This looks like React code, which needs extra tools and will not run as a web page. Ask Gemini to rewrite it as a single HTML file.';
       hintAction.textContent = 'Copy a request for Gemini';
+    } else if (kind === 'cut-off') {
+      hintText.textContent = 'The end of the code seems to be missing. It should finish with </html>. Copy it again, or ask Gemini for the complete file.';
+      hintAction.textContent = 'Copy a request for Gemini';
+    } else if (kind === 'partial') {
+      hintText.textContent = "This looks like only part of the code. In Gemini, use the code box's copy button to copy all of it. It usually starts with <!DOCTYPE html>.";
+      hintAction.textContent = 'Show me how';
     } else {
       hintText.textContent = 'This does not look like a complete web page. Make sure you copy all of the code. It usually starts with <!DOCTYPE html>.';
       hintAction.textContent = 'Show me how';
@@ -1004,14 +1030,48 @@
     if (kind === 'extra-text') {
       replaceCode(cleanUpCode(editor.value), { undoMessage: 'Cleaned up your code.' });
       hint.hidden = true;
-    } else if (kind === 'react') {
-      copyText(REWRITE_REQUEST).then(function (ok) {
-        toast(ok ? 'Copied! Paste it into Gemini, then paste the new code here.' : 'Could not copy. Ask Gemini: ' + REWRITE_REQUEST, { duration: ok ? 5000 : 12000 });
-      });
+    } else if (kind === 'react' || kind === 'cut-off') {
+      copyGeminiRequest(kind === 'react' ? REWRITE_REQUEST : COMPLETE_REQUEST);
     } else {
       openHelp('trouble');
     }
   });
+
+  function copyGeminiRequest(request) {
+    copyText(request).then(function (ok) {
+      toast(ok ? 'Copied! Paste it into Gemini, then paste the new code here.' : 'Could not copy. Ask Gemini: ' + request, { duration: ok ? 5000 : 12000 });
+    });
+  }
+
+  $('noticeCopyBtn').addEventListener('click', function () { copyGeminiRequest(REWRITE_REQUEST); });
+
+  // Pasting is the main way code arrives, so fix the two common mix-ups right away:
+  // a whole new page pasted into the middle of the old one, and chat text around the code.
+  // Returns true when it took care of the paste.
+  function handleIncomingPaste(text, viaButton) {
+    var current = editor.value;
+    var selectedAll = editor.selectionStart === 0 && editor.selectionEnd === current.length;
+    var replacing = viaButton || (current.trim() !== '' && !selectedAll && findHtmlStart(text) >= 0);
+    var replacesEverything = replacing || selectedAll || current.trim() === '';
+    var cleaning = replacesEverything && analyzeCode(text) === 'extra-text';
+    if (!replacing && !cleaning) { return false; }
+    var finalText = cleaning ? cleanUpCode(text) : text;
+    var hadCode = current.trim() !== '' && current !== finalText;
+    var message;
+    if (hadCode && cleaning) {
+      message = "Replaced your old code with the new version (and removed Gemini's chat text).";
+    } else if (hadCode) {
+      message = 'Replaced your old code with the new version.';
+    } else if (cleaning) {
+      message = "Removed Gemini's chat text that was copied along with your code.";
+    }
+    replaceCode(finalText, {
+      undoMessage: message,
+      undoValue: hadCode ? current : text,
+      showPreview: true
+    });
+    return true;
+  }
   hintDismiss.addEventListener('click', function () {
     state.hintDismissedFor = hint.dataset.kind;
     hint.hidden = true;
@@ -1056,7 +1116,7 @@
         toast('Nothing has been copied yet. Copy the code from Gemini first.');
         return;
       }
-      replaceCode(text, { undoMessage: 'Replaced your code with what you copied.', showPreview: true });
+      handleIncomingPaste(text, true);
     }, pasteWithKeyboard);
   }
 
@@ -1286,7 +1346,14 @@
   // Event wiring
   // ---------------------------------------------------------------------------
 
-  editor.addEventListener('paste', function () { state.justPasted = true; });
+  editor.addEventListener('paste', function (event) {
+    var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
+    if (text && handleIncomingPaste(text, false)) {
+      event.preventDefault();
+      return;
+    }
+    state.justPasted = true;
+  });
 
   editor.addEventListener('input', function () {
     if (state.justPasted) {
@@ -1315,7 +1382,7 @@
     savePrefs();
     if (state.autoRun && isDirty()) { run(); }
     updateRunIndicators();
-    toast(state.autoRun ? 'The preview will update as you edit.' : 'Auto-update is off. Press Run to see your changes.');
+    toast(state.autoRun ? 'The preview will update as you type.' : 'The preview will wait until you press Run.');
   });
 
   wrapToggle.addEventListener('change', function () {
@@ -1386,6 +1453,7 @@
     loadPrefs();
     state.autoRun = prefs.autoRun;
     autoRunToggle.checked = prefs.autoRun;
+    updateRunIndicators();
     applyWrap();
     setSplit(prefs.split, false);
     setView('code');
@@ -1419,8 +1487,8 @@
         state.autoRun = false;
         autoRunToggle.checked = false;
         safeBannerText.textContent = pending
-          ? 'Last time, your creation did not finish starting. It may have frozen the page, so it has not been started again. Auto-update is off for now. Check the code (or ask Gemini to fix it), then press Run.'
-          : 'Safe mode: your code has not been started. Auto-update is off for now. Press Run when you are ready.';
+          ? 'Last time, your creation did not finish starting. It may have frozen the page, so it has not been started again. Check the code (or ask Gemini to fix it), then press Run.'
+          : 'Safe mode: your code has not been started. Press Run when you are ready.';
         safeBanner.hidden = false;
         clearPending();
         updateRunIndicators();

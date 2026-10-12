@@ -113,15 +113,9 @@
       <div class="pane-header">
         <h2 id="previewHeading"><span class="step" aria-hidden="true">2</span> Your creation</h2>
         <div class="pane-actions">
-          <span id="runStatus" class="run-status" aria-live="polite"></span>
-          <label class="switch" title="Update the preview automatically as you edit">
-            <input type="checkbox" id="autoRunToggle" checked>
-            <span class="switch-track" aria-hidden="true"></span>
-            Auto-update
-          </label>
-          <button type="button" id="runBtn" class="btn btn-run" aria-keyshortcuts="Control+Enter Meta+Enter" title="Run the code (Ctrl + Enter)">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5v13l10.5-6.5z"/></svg>
-            <span id="runBtnLabel">Run</span>
+          <button type="button" id="runBtn" class="btn" aria-keyshortcuts="Control+Enter Meta+Enter" title="Run the code (Ctrl + Enter)">
+            <svg class="icon icon-fill" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+            <span id="runBtnLabel">Restart</span>
           </button>
           <button type="button" id="fullscreenBtn" class="btn" title="Show your creation on the whole screen">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
@@ -142,6 +136,12 @@
           <p class="empty-sub desktop-only">Paste code on the left and it comes to life on this side.</p>
           <p class="empty-sub mobile-only">Paste code in the <strong>Code</strong> tab and it comes to life here.</p>
         </div>
+        <div id="previewNotice" class="preview-empty" hidden>
+          <svg class="empty-icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle cx="24" cy="24" r="17"/><path d="M24 15v11M24 32h.01"/></svg>
+          <p class="empty-title">This code can't run here</p>
+          <p class="empty-sub">It's written in React, which needs extra tools. Ask Gemini for a single HTML file instead.</p>
+          <button type="button" id="noticeCopyBtn" class="btn btn-primary">Copy a request for Gemini</button>
+        </div>
       </div>
 
       <div id="problems" class="problems" hidden>
@@ -157,6 +157,15 @@
           <button type="button" id="problemsCopy" class="btn btn-small btn-primary">Copy for Gemini</button>
           <button type="button" id="problemsClose" class="btn btn-small btn-quiet" aria-label="Hide problem message">Hide</button>
         </div>
+      </div>
+
+      <div class="pane-footer">
+        <span id="runStatus" class="run-status"></span>
+        <label class="switch" title="When this is on, the preview changes a moment after you stop typing">
+          <input type="checkbox" id="autoRunToggle" checked>
+          <span class="switch-track" aria-hidden="true"></span>
+          Update as I type
+        </label>
       </div>
     </section>
   </main>
@@ -194,17 +203,17 @@
         <h3>Get started in three steps</h3>
         <ol class="steps">
           <li><strong>Ask Gemini</strong> to make something, then copy the code it gives you.</li>
-          <li><strong>Paste</strong> it into the <em>Your code</em> box. Your creation appears on the right, ready to use.</li>
-          <li><strong>Change it</strong>: edit the code yourself, or ask Gemini for changes and paste the new version. When you are happy, click <strong>Download</strong>.</li>
+          <li><strong>Paste</strong> it into the <em>Your code</em> box. Your creation appears next to it, ready to use (on a phone, tap <em>Preview</em>).</li>
+          <li><strong>Change it</strong>: edit the code yourself, or ask Gemini for changes and paste the new version. A new version replaces the old one by itself. When you are happy, click <strong>Download</strong>.</li>
         </ol>
       </section>
 
       <section id="help-ask">
         <h3>What to ask Gemini</h3>
         <p>Add this sentence to your request so Gemini gives you code that works here:</p>
-        <blockquote id="promptTip">Make it a single HTML file with all of the CSS and JavaScript inside it. Don't use React or any build tools. Give me the complete file in one code block.</blockquote>
+        <blockquote id="promptTip">Make it a single HTML file with all of the CSS and JavaScript inside it. Don't use React, Tailwind, or other outside libraries. Give me the complete file in one code block.</blockquote>
         <button type="button" id="copyPromptBtn" class="btn btn-small">Copy this sentence</button>
-        <p>Want a change? Tell Gemini what to change and ask for <em>the complete updated file</em>. Then click <strong>Paste</strong> to replace your code with the new version.</p>
+        <p>Want a change? Tell Gemini what to change and ask for <em>the complete updated file</em>. Then paste it here. It replaces your old code (and you can undo).</p>
       </section>
 
       <section id="help-home">

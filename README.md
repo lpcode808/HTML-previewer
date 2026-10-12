@@ -3,11 +3,16 @@
 **Paste. Play. Take it home.** A zero-setup web page for workshops: participants paste the HTML that Google Gemini (or any AI chat) gives them, and their creation runs right next to the code. There's no account, no install, no server, and nothing gets uploaded.
 
 - Paste a complete HTML document (with its CSS and JavaScript) and it runs immediately.
-- The preview updates as you edit (after a short pause), or when you press **Run** (Ctrl/⌘ + Enter).
+- The preview updates as you type (after a short pause). The **Update as I type** switch turns this off, and **Run**/**Restart** (Ctrl/⌘ + Enter) runs it by hand.
+- Pasting a complete new version replaces the old code instead of mixing the two, with Undo.
 - **Download** saves the exact code as `my-creation.html`, which opens in any browser.
 - Code is autosaved in the browser ("Saved on this device"), so a refresh doesn't lose work.
 - Other features: a resizable split, full-screen preview, a sample project, word wrap, and a phone layout with tabs.
-- Plain-language help for common mistakes: copied chat text or ``` marks, React code, JavaScript errors (with a **Copy for Gemini** button), and creations that freeze the page.
+- Plain-language help for common mistakes:
+  - Gemini's chat text copied along with the code is removed automatically.
+  - React code, or answers that were cut off, get a ready-made request for Gemini.
+  - JavaScript errors get a **Copy for Gemini** button.
+  - Creations that freeze the page open paused on the next visit.
 
 For running a session, see the [facilitator guide](FACILITATOR.md). For what was tested and what wasn't, see [TESTING.md](TESTING.md).
 
