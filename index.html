@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Paste HTML from an AI chat like Gemini and see it working instantly. Nothing to install, no account, nothing uploaded.">
+  <meta name="color-scheme" content="light dark">
+  <title>HTML Playground · Paste &amp; Play</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M12 10l-6 6 6 6M20 10l6 6-6 6' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-view="code">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <rect width="32" height="32" rx="8"></rect>
+        <path d="M12 10l-6 6 6 6M20 10l6 6-6 6"></path>
+      </svg>
+      <div>
+        <h1>HTML Playground</h1>
+        <p class="tagline">Paste <span aria-hidden="true">·</span> Play <span aria-hidden="true">·</span> Take it home</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span id="saveStatus" class="save-status" data-state="idle"></span>
+      <button type="button" id="helpBtn" class="btn btn-quiet" aria-label="Help">
+        <span class="btn-icon" aria-hidden="true">?</span> <span class="help-label">Help</span>
+      </button>
+      <button type="button" id="downloadBtn" class="btn btn-primary" title="Save your creation as a file you can open in any browser">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
+        Download
+      </button>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Choose what to show">
+    <button type="button" role="tab" id="tabCode" aria-controls="codePane" aria-selected="true">
+      <span class="step" aria-hidden="true">1</span> Code
+    </button>
+    <button type="button" role="tab" id="tabPreview" aria-controls="previewPane" aria-selected="false" tabindex="-1">
+      <span class="step" aria-hidden="true">2</span> Preview
+    </button>
+  </div>
+
+  <main id="workspace" class="workspace">
+    <section id="codePane" class="pane pane-code" aria-labelledby="codeHeading">
+      <div class="pane-header">
+        <h2 id="codeHeading"><span class="step" aria-hidden="true">1</span> Your code</h2>
+        <div class="pane-actions">
+          <button type="button" id="pasteBtn" class="btn" title="Replace all of the code with what you copied">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4h6v3H9zM8 5.5H6.5A1.5 1.5 0 0 0 5 7v12a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V7a1.5 1.5 0 0 0-1.5-1.5H16"/></svg>
+            Paste
+          </button>
+          <button type="button" id="copyBtn" class="btn" title="Copy all of the code, for example to send back to Gemini">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>
+            <span>Copy<span class="long-label"> code</span></span>
+          </button>
+          <button type="button" id="sampleBtn" class="btn" title="Load a small example project">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 18.5 12 15.6 7 18.5l1.4-5.7L4 9l5.8-.7z"/></svg>
+            Sample
+          </button>
+          <button type="button" id="clearBtn" class="btn btn-danger-quiet" title="Remove all of the code and start over">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></svg>
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div id="hint" class="hint" role="status" hidden>
+        <p id="hintText" class="hint-text"></p>
+        <div class="hint-actions">
+          <button type="button" id="hintAction" class="btn btn-small btn-primary"></button>
+          <button type="button" id="hintDismiss" class="btn btn-small btn-quiet">Ignore</button>
+        </div>
+      </div>
+
+      <div class="editor-wrap">
+        <label for="editor" class="visually-hidden">HTML code. Paste your HTML from Gemini here.</label>
+        <textarea id="editor" class="editor" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" aria-describedby="emptyTitle editorStatus"></textarea>
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><rect x="10" y="8" width="28" height="34" rx="4"/><path d="M18 8V6h12v2M17 20h14M17 27h14M17 34h9"/></svg>
+          <p id="emptyTitle" class="empty-title">Paste your HTML from Gemini here</p>
+          <p class="empty-sub">Click in this box, then press <kbd id="pasteKeys">Ctrl + V</kbd></p>
+          <div class="empty-actions">
+            <button type="button" id="emptyPasteBtn" class="btn btn-primary btn-large">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4h6v3H9zM8 5.5H6.5A1.5 1.5 0 0 0 5 7v12a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V7a1.5 1.5 0 0 0-1.5-1.5H16"/></svg>
+              Paste what I copied
+            </button>
+            <button type="button" id="emptySampleBtn" class="btn btn-large">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 18.5 12 15.6 7 18.5l1.4-5.7L4 9l5.8-.7z"/></svg>
+              Try a sample first
+            </button>
+          </div>
+          <p class="empty-foot">New here? <button type="button" class="link-btn" data-help="start">See how it works</button></p>
+        </div>
+      </div>
+
+      <div class="pane-footer">
+        <span id="editorStatus" class="editor-status" aria-live="off">Empty</span>
+        <label class="switch">
+          <input type="checkbox" id="wrapToggle" checked>
+          <span class="switch-track" aria-hidden="true"></span>
+          Wrap long lines
+        </label>
+      </div>
+    </section>
+
+    <div id="divider" class="divider" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="codePane previewPane" aria-label="Resize code and preview. Use left and right arrow keys." aria-valuemin="20" aria-valuemax="80" aria-valuenow="50" title="Drag to resize. Double-click to reset.">
+      <span class="divider-grip" aria-hidden="true"></span>
+    </div>
+
+    <section id="previewPane" class="pane pane-preview" aria-labelledby="previewHeading">
+      <div class="pane-header">
+        <h2 id="previewHeading"><span class="step" aria-hidden="true">2</span> Your creation</h2>
+        <div class="pane-actions">
+          <span id="runStatus" class="run-status" aria-live="polite"></span>
+          <label class="switch" title="Update the preview automatically as you edit">
+            <input type="checkbox" id="autoRunToggle" checked>
+            <span class="switch-track" aria-hidden="true"></span>
+            Auto-update
+          </label>
+          <button type="button" id="runBtn" class="btn btn-run" aria-keyshortcuts="Control+Enter Meta+Enter" title="Run the code (Ctrl + Enter)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+            <span id="runBtnLabel">Run</span>
+          </button>
+          <button type="button" id="fullscreenBtn" class="btn" title="Show your creation on the whole screen">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+            <span id="fullscreenLabel">Full screen</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="safeBanner" class="banner" role="alert" hidden>
+        <p><strong>Paused to keep things safe.</strong> <span id="safeBannerText"></span></p>
+        <button type="button" id="safeRunBtn" class="btn btn-small btn-run">Run it now</button>
+      </div>
+
+      <div id="frameHost" class="frame-host">
+        <div id="previewEmpty" class="preview-empty">
+          <svg class="empty-icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><rect x="6" y="9" width="36" height="30" rx="4"/><path d="M6 16h36M11 12.5h.01M15 12.5h.01M19 12.5h.01"/></svg>
+          <p class="empty-title">Your creation will appear here</p>
+          <p class="empty-sub desktop-only">Paste code on the left and it comes to life on this side.</p>
+          <p class="empty-sub mobile-only">Paste code in the <strong>Code</strong> tab and it comes to life here.</p>
+        </div>
+      </div>
+
+      <div id="problems" class="problems" hidden>
+        <div class="problems-main">
+          <span class="problems-icon" aria-hidden="true">!</span>
+          <div class="problems-text">
+            <p class="problems-title">Your creation reported a problem. <span class="problems-note">It may still work. If something is broken, copy the problem and ask Gemini to fix it.</span></p>
+            <p id="problemsMessage" class="problems-message"></p>
+          </div>
+        </div>
+        <div class="problems-actions">
+          <button type="button" id="problemsLine" class="btn btn-small">Show line</button>
+          <button type="button" id="problemsCopy" class="btn btn-small btn-primary">Copy for Gemini</button>
+          <button type="button" id="problemsClose" class="btn btn-small btn-quiet" aria-label="Hide problem message">Hide</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footnote">
+    <span>Your code stays in this browser. Nothing is uploaded.</span>
+    <button type="button" class="link-btn" data-help="home">How do I take my creation home?</button>
+    <button type="button" class="link-btn" data-help="safety">About the preview</button>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite">
+    <span id="toastText"></span>
+    <button type="button" id="toastAction" class="btn btn-small btn-quiet" hidden></button>
+  </div>
+
+  <dialog id="confirmDialog" class="dialog" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+    <form method="dialog">
+      <h2 id="confirmTitle"></h2>
+      <p id="confirmBody"></p>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="btn btn-quiet">Cancel</button>
+        <button type="button" id="confirmExtra" class="btn" hidden></button>
+        <button type="submit" value="confirm" id="confirmOk" class="btn btn-danger"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="helpDialog" class="dialog dialog-wide" aria-labelledby="helpTitle">
+    <div class="dialog-head">
+      <h2 id="helpTitle">How the HTML Playground works</h2>
+      <form method="dialog"><button type="submit" class="btn btn-quiet" aria-label="Close help">Close</button></form>
+    </div>
+    <div class="help-body">
+      <section id="help-start">
+        <h3>Get started in three steps</h3>
+        <ol class="steps">
+          <li><strong>Ask Gemini</strong> to make something, then copy the code it gives you.</li>
+          <li><strong>Paste</strong> it into the <em>Your code</em> box. Your creation appears on the right, ready to use.</li>
+          <li><strong>Change it</strong>: edit the code yourself, or ask Gemini for changes and paste the new version. When you are happy, click <strong>Download</strong>.</li>
+        </ol>
+      </section>
+
+      <section id="help-ask">
+        <h3>What to ask Gemini</h3>
+        <p>Add this sentence to your request so Gemini gives you code that works here:</p>
+        <blockquote id="promptTip">Make it a single HTML file with all of the CSS and JavaScript inside it. Don't use React or any build tools. Give me the complete file in one code block.</blockquote>
+        <button type="button" id="copyPromptBtn" class="btn btn-small">Copy this sentence</button>
+        <p>Want a change? Tell Gemini what to change and ask for <em>the complete updated file</em>. Then click <strong>Paste</strong> to replace your code with the new version.</p>
+      </section>
+
+      <section id="help-home">
+        <h3>Take your creation home</h3>
+        <ol class="steps">
+          <li>Click <strong>Download</strong>. A file called <code>my-creation.html</code> goes to your Downloads folder.</li>
+          <li>Double-click the file. It opens in your web browser and works without this website.</li>
+          <li>To share it, send the file by email or put it in a shared drive. Other people should download it and open it in a browser. (Google Drive and some email apps show the code instead of running it.)</li>
+        </ol>
+        <p>Your code is also kept in <em>this</em> browser on <em>this</em> computer, so it will still be here if you refresh the page. It will not be there on a different computer, in a private window, or after clearing browser data. Download it to keep it.</p>
+      </section>
+
+      <section id="help-trouble">
+        <h3>If something goes wrong</h3>
+        <ul>
+          <li><strong>Blank preview?</strong> Make sure you copied <em>all</em> of the code. It usually starts with <code>&lt;!DOCTYPE html&gt;</code> and ends with <code>&lt;/html&gt;</code>.</li>
+          <li><strong>A problem message under the preview?</strong> Click <strong>Copy for Gemini</strong>, paste it into Gemini, and paste the fixed code back here.</li>
+          <li><strong>Page frozen?</strong> Some code never stops running. Close the tab or reload the page. The playground will open paused so you can fix the code. You can also add <code>?safe</code> to the end of the web address to open it paused.</li>
+          <li><strong>Images or fonts missing?</strong> Those come from the internet. Check your connection.</li>
+        </ul>
+      </section>
+
+      <section id="help-safety">
+        <h3>About the preview</h3>
+        <p>Your creation runs inside a locked-down box, called a <em>sandbox</em>. Inside it, buttons, sliders, animations, sound, drawing, and calculations all work. It cannot see or change this page, and it cannot read anything this playground saved on your computer.</p>
+        <p>Being honest about the limits:</p>
+        <ul>
+          <li>Code in the preview can still use the internet: it can load images, fonts, and code from other websites, and it can send information to them. Only run code you got from a source you trust.</li>
+          <li>Code can still slow down or freeze your browser, for example with a loop that never ends.</li>
+          <li>Anything your creation saves while you preview it (like a high score) is forgotten each time the preview restarts. In the downloaded file, saving works normally.</li>
+          <li>Some browser features are blocked in the preview: camera, microphone, location, cookies, and opening links that need a sign-in. Pop-up windows and links in new tabs open with the same restrictions. These usually work in the downloaded file.</li>
+          <li>Links to other files on your computer (like <code>picture.png</code>) do not work, because the playground only has the one file you pasted.</li>
+        </ul>
+        <p>This website has no accounts, no tracking, and no analytics. Your code never leaves your browser unless the code itself contacts the internet.</p>
+      </section>
+
+      <section id="help-keys">
+        <h3>Keyboard shortcuts</h3>
+        <dl class="keys">
+          <div><dt><kbd class="mod-key">Ctrl</kbd> + <kbd>Enter</kbd></dt><dd>Run your code now</dd></div>
+          <div><dt><kbd class="mod-key">Ctrl</kbd> + <kbd>S</kbd></dt><dd>Save on this device (it saves by itself, too)</dd></div>
+          <div><dt><kbd>Tab</kbd></dt><dd>Move to the next button. Your code box does not use Tab for typing.</dd></div>
+          <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Move the divider when it is selected</dd></div>
+          <div><dt><kbd>Esc</kbd></dt><dd>Leave full screen or close a window like this one</dd></div>
+        </dl>
+      </section>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
