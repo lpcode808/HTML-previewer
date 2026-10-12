@@ -122,6 +122,17 @@ async function parentErrors(page, problems) {
   return problems.concat(await page.evaluate(() => window.__parentErrors || []));
 }
 
+// The saved code in the playground's own storage (keys look like html-playground:v1:/path/:code).
+async function savedCode(page) {
+  return page.evaluate(() => {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.startsWith('html-playground:v1:') && key.endsWith(':code')) { return localStorage.getItem(key); }
+    }
+    return null;
+  });
+}
+
 async function runs(page) { return page.evaluate(() => window.__runs || 0); }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -317,8 +328,8 @@ await test('4. Preview cannot reach the parent page, its storage, or top-level n
   await wait(800);
   assert(page.url() === BASE, 'parent page was not navigated away: ' + page.url());
   const sandbox = await page.$eval('#frameHost iframe', (f) => f.getAttribute('sandbox'));
-  assert(!/allow-same-origin|allow-top-navigation|escape-sandbox/.test(sandbox), 'sandbox flags are restrictive: ' + sandbox);
-  assert(await page.evaluate(() => localStorage.getItem('html-playground:v1:code')) !== null, 'parent storage intact');
+  assert(!/allow-same-origin|allow-top-navigation|escape-sandbox|allow-downloads/.test(sandbox), 'sandbox flags are restrictive: ' + sandbox);
+  assert((await savedCode(page)) !== null, 'parent storage intact');
 
   // Forged / hostile messages from the preview are shown as text only, and stale ones are ignored.
   await setCode(page, `<!DOCTYPE html><script>
@@ -333,6 +344,25 @@ await test('4. Preview cannot reach the parent page, its storage, or top-level n
   assert(!text.includes('STALE'), 'message for another run ignored');
   assert(await page.$('#problems img') === null, 'no element injected');
   assert(await page.evaluate(() => window.__pwned) === undefined, 'nothing executed in parent');
+
+  // The run id is not a secret (it filters out stale messages). Even with it,
+  // odd message shapes must not upset the parent.
+  await setCode(page, `<!DOCTYPE html><script>
+    Object.defineProperty(Object.prototype, 'run', { configurable: true, set: function (v) {
+      Object.defineProperty(this, 'run', { value: v, writable: true, enumerable: true, configurable: true });
+      var id = v;
+      setTimeout(function () {
+        parent.postMessage({ htmlPlayground: 1, type: 'error', run: id, message: { toString: 'x' }, line: { valueOf: 1 } }, '*');
+        parent.postMessage({ htmlPlayground: 1, type: 'resource', run: id, url: ['x'], tag: 7 }, '*');
+        parent.postMessage({ htmlPlayground: 1, type: 'error', run: id, message: 'x'.repeat(100000), line: 1e9 }, '*');
+      }, 50);
+    } });
+    setTimeout(function () { throw new Error('first'); }, 10);
+  <\/script>`);
+  await wait(1700);
+  const errs = await page.evaluate(() => window.__parentErrors);
+  assert(errs.length === 0, 'odd messages handled quietly: ' + errs.join('; '));
+  assert((await page.textContent('#problemsMessage')).length < 1500, 'long messages are cut short');
   await context.close();
 });
 
@@ -473,6 +503,70 @@ await test('7c. ?safe opens paused', async () => {
   await context.close();
 });
 
+await test('7d. Freezes that start later are caught too; a second open tab is not mistaken for a freeze', async () => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  const { page } = await openApp({ context });
+  await setCode(page, '<!DOCTYPE html><p>late</p><script>setTimeout(function () { while (true) {} }, 4500);<\/script>');
+  await wait(7500);
+  await page.close({ runBeforeUnload: false }).catch(() => {});
+  const again = await context.newPage();
+  await again.goto(BASE);
+  await again.waitForTimeout(500);
+  assert(await again.isVisible('#safeBanner'), 'a freeze 4.5 s after start is detected');
+
+  // Two healthy tabs: the second one must not open paused.
+  await setCode(again, '<!DOCTYPE html><p id="ok">fine</p>');
+  await wait(1500);
+  const second = await context.newPage();
+  await second.goto(BASE);
+  const frame = await previewFrame(second, 6000);
+  assert(await frame.textContent('#ok') === 'fine', 'second tab starts the code');
+  assert(await second.isHidden('#safeBanner'), 'no false "stopped responding" message');
+  await context.close();
+});
+
+await test('7e. Two tabs: changes in one tab are not silently overwritten by the other', async () => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  const { page: a } = await openApp({ context });
+  await setCode(a, '<!DOCTYPE html><p>first</p>');
+  await wait(700);
+  const b = await context.newPage();
+  await b.goto(BASE);
+  await setCode(b, '<!DOCTYPE html><p>newer work in tab B</p>');
+  await wait(800);
+  assert(await a.isVisible('#tabBanner'), 'tab A notices tab B saved different code');
+  await setCode(a, '<!DOCTYPE html><p>stale tab A keeps typing</p>');
+  await wait(800);
+  assert((await savedCode(a)).includes('newer work in tab B'), "tab A did not overwrite tab B's saved code");
+  assert((await a.textContent('#saveStatus')).includes('another tab'), 'tab A says it is not saving');
+  await a.click('#tabUseOther');
+  assert((await a.inputValue('#editor')).includes('newer work in tab B'), 'can load the other version');
+  assert(await a.isHidden('#tabBanner'), 'banner closes');
+  await context.close();
+});
+
+await test('7f. Unusual pastes cannot make the playground itself slow', async () => {
+  const { context, page } = await openApp();
+  const cases = {
+    'many comments, no doctype': '<!--a-->' + ' <!--b-->'.repeat(40) + '<p>x</p>',
+    'many blank lines': '\n'.repeat(60000) + 'x',
+    'many unclosed tags': '<a'.repeat(120000),
+    'many unclosed comments': '<!--'.repeat(40000),
+    'many unclosed meta tags with accents': 'é' + '<meta '.repeat(40000)
+  };
+  for (const [name, code] of Object.entries(cases)) {
+    const t0 = Date.now();
+    await setCode(page, code);
+    await page.evaluate(() => document.getElementById('runBtn').click());
+    const elapsed = Date.now() - t0;
+    assert(elapsed < 1500, `${name}: handled in ${elapsed} ms`);
+  }
+  const t1 = Date.now();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#downloadBtn')]);
+  assert(Date.now() - t1 < 1500 && download.suggestedFilename() === 'my-creation.html', 'download stays quick');
+  await context.close();
+});
+
 await test('8. Long files stay responsive', async () => {
   const { context, page } = await openApp();
   const rows = [];
@@ -509,6 +603,7 @@ await test('8b. Very large code: autosave fails gracefully and says so', async (
   assert(/Too big|Not saved/.test(status), 'save problem shown: ' + status);
   const frame = await previewFrame(page, 10000);
   assert((await frame.textContent('p')) === 'big', 'still previews');
+  assert((await savedCode(page)) === null, 'no older version left behind to be restored as if it were current');
   { const errs = await parentErrors(page, problems); assert(errs.length === 0, 'no uncaught errors: ' + errs.join('; ')); }
   await context.close();
 });
@@ -553,7 +648,7 @@ await test('9. Clear and Sample ask first; Undo works; keyboard controls work', 
   await page.waitForFunction(() => document.getElementById('editor').value === '');
   assert(await page.inputValue('#editor') === '', 'cleared');
   assert(await page.isVisible('text=Paste your HTML from Gemini here'), 'empty state is back');
-  assert(await page.evaluate(() => localStorage.getItem('html-playground:v1:code')) === '', 'cleared on this device too');
+  assert((await savedCode(page)) === '', 'cleared on this device too');
   await page.click('#toastAction');
   assert(await page.inputValue('#editor') === '<!DOCTYPE html><p>mine</p>', 'undo restores');
 

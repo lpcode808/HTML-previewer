@@ -14,15 +14,19 @@
   // Settings
   // ---------------------------------------------------------------------------
 
-  var STORAGE_PREFIX = 'html-playground:v1:';
+  // The folder is part of the key so that two copies of the playground on one
+  // github.io account (they share storage) do not overwrite each other's code.
+  var STORAGE_PREFIX = 'html-playground:v1:' + window.location.pathname.replace(/[^\/]*$/, '') + ':';
   var KEYS = {
     code: STORAGE_PREFIX + 'code',
     prefs: STORAGE_PREFIX + 'prefs',
-    pending: STORAGE_PREFIX + 'run-pending'
+    running: STORAGE_PREFIX + 'running:'   // + tab id; see "Freeze recovery"
   };
   var AUTO_RUN_DELAY = 900;       // ms of quiet typing before the preview restarts
   var SAVE_DELAY = 400;           // ms of quiet typing before autosaving
-  var PENDING_SETTLE_DELAY = 3000; // ms after the preview loads before we trust it did not freeze
+  var HEARTBEAT_INTERVAL = 1000;  // ms between "this tab is still alive" notes while a preview runs
+  var HEARTBEAT_STALE = 3000;     // ms without a note before we assume that tab froze
+  var MAX_ANALYZE_LENGTH = 2000000; // skip paste hints for enormous code
   var DOWNLOAD_NAME = 'my-creation.html';
   var NARROW_QUERY = '(max-width: 820px)';
 
@@ -30,7 +34,8 @@
   //   allow-same-origin   (would give pasted code access to this page and its storage)
   //   allow-top-navigation*  (would let pasted code replace this page)
   //   allow-popups-to-escape-sandbox (popups keep these same restrictions)
-  var SANDBOX = 'allow-scripts allow-modals allow-forms allow-popups allow-pointer-lock allow-downloads';
+  //   allow-downloads (would let pasted code save files to the Downloads folder without a click)
+  var SANDBOX = 'allow-scripts allow-modals allow-forms allow-popups allow-pointer-lock';
   // Browser features the preview may use. Camera, microphone and location are not granted.
   var ALLOW = 'fullscreen; clipboard-write; autoplay';
 
@@ -317,6 +322,7 @@
   var problemsCopy = $('problemsCopy');
   var problemsClose = $('problemsClose');
   var safeBanner = $('safeBanner');
+  var tabBanner = $('tabBanner');
   var safeBannerText = $('safeBannerText');
   var safeRunBtn = $('safeRunBtn');
   var toastEl = $('toast');
@@ -357,6 +363,17 @@
     remove: function (key) {
       if (!this.available) { return; }
       try { window.localStorage.removeItem(key); } catch (e) { /* ignore */ }
+    },
+    keysStartingWith: function (prefix) {
+      var found = [];
+      if (!this.available) { return found; }
+      try {
+        for (var i = 0; i < window.localStorage.length; i++) {
+          var key = window.localStorage.key(i);
+          if (key && key.indexOf(prefix) === 0) { found.push(key); }
+        }
+      } catch (e) { /* ignore */ }
+      return found;
     }
   };
 
@@ -383,9 +400,11 @@
     problemTotal: 0,
     problemsHidden: false,
     focusGuard: null,       // { runId, until } while we keep keyboard focus in the editor
-    previewPointerEnteredAt: 0,
-    runStartedAt: 0,
-    savePending: false
+    lastRunLines: 0,
+    savePending: false,
+    saveFailed: false,
+    savePaused: false,      // another tab changed the saved code; wait for the person to choose
+    otherTabCode: null
   };
   var timers = {};
   var isMac = /Mac|iPhone|iPad|iPod/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent);
@@ -647,6 +666,9 @@
       if (reason === 'quota') {
         saveStatus.textContent = 'Too big to save here';
         saveStatus.title = 'This code is too big for this browser\'s storage. Click Download to keep a copy.';
+      } else if (reason === 'other-tab') {
+        saveStatus.textContent = 'Not saved: open in another tab';
+        saveStatus.title = 'Choose which version to keep in the yellow box above your code.';
       } else {
         saveStatus.textContent = 'Not saved on this device';
         saveStatus.title = 'This browser is not letting the playground save (for example in some private windows). Click Download to keep a copy.';
@@ -662,11 +684,18 @@
   function saveNow() {
     clearTimeout(timers.save);
     state.savePending = false;
+    if (state.savePaused) {
+      setSaveState('error', 'other-tab');
+      return false;
+    }
     var result = store.set(KEYS.code, editor.value);
+    state.saveFailed = !result.ok;
     if (result.ok) {
       lastSaveProblem = null;
       setSaveState(hasCode() ? 'saved' : 'idle');
     } else {
+      // Do not leave an older version behind to be "restored" as if it were the latest.
+      if (result.reason === 'quota') { store.remove(KEYS.code); }
       setSaveState('error', result.reason);
       if (lastSaveProblem !== result.reason) {
         lastSaveProblem = result.reason;
@@ -679,7 +708,7 @@
   }
 
   function scheduleSave() {
-    if (store.available && saveStatus.dataset.state !== 'error') { setSaveState('saving'); }
+    if (store.available && !state.savePaused && saveStatus.dataset.state !== 'error') { setSaveState('saving'); }
     clearTimeout(timers.save);
     state.savePending = true;
     timers.save = setTimeout(saveNow, SAVE_DELAY);
@@ -689,25 +718,92 @@
   // Running the preview
   // ---------------------------------------------------------------------------
 
+  // Where the <!DOCTYPE ...> ends (after an optional byte-order mark, spaces and
+  // comments), or -1. A plain scan, so odd input can never make it slow.
+  function doctypeEnd(code) {
+    var i = code.charCodeAt(0) === 0xFEFF ? 1 : 0;
+    for (;;) {
+      while (i < code.length && ' \t\n\r\f'.indexOf(code.charAt(i)) !== -1) { i += 1; }
+      if (code.substr(i, 4) !== '<!--') { break; }
+      var close = code.indexOf('-->', i + 4);
+      if (close === -1) { return -1; }
+      i = close + 3;
+    }
+    if (code.substr(i, 9).toLowerCase() !== '<!doctype') { return -1; }
+    var end = code.indexOf('>', i);
+    return end === -1 ? -1 : end + 1;
+  }
+
   // Adds the helper script right after the doctype (or at the very start), on the
-  // same line, so standards mode and the line numbers of the pasted code are unchanged.
+  // same line, so the line numbers of the pasted code are unchanged.
   function buildPreviewDocument(code, runId) {
     var helper = '<script>(' + HELPER_SOURCE + ')(' + JSON.stringify(runId) + ');<\/script>';
-    var match = /^﻿?\s*(?:<!--[\s\S]*?-->\s*)*<!doctype[^>]*>/i.exec(code);
-    if (match) {
-      return code.slice(0, match[0].length) + helper + code.slice(match[0].length);
+    var at = doctypeEnd(code);
+    if (at > 0) {
+      return code.slice(0, at) + helper + code.slice(at);
     }
     return helper + code;
   }
 
-  function markPending(runId) {
-    if (store.available) { store.set(KEYS.pending, runId); }
+  // ---------------------------------------------------------------------------
+  // Freeze recovery
+  // While a preview runs, this tab writes a small "still alive" note every second.
+  // If pasted code freezes the tab, the notes stop. The next visit finds a stale
+  // note and opens paused instead of freezing again. A normal close removes the
+  // note, and hidden tabs (whose timers the browser slows down) are not counted.
+  // ---------------------------------------------------------------------------
+
+  var TAB_ID = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+  function writeHeartbeat() {
+    if (!state.runId) { return; }
+    store.set(KEYS.running + TAB_ID, JSON.stringify({ alive: Date.now(), hidden: document.visibilityState === 'hidden' }));
   }
 
-  function clearPending(runId) {
+  function startHeartbeat() {
     if (!store.available) { return; }
-    if (!runId || store.get(KEYS.pending) === runId) { store.remove(KEYS.pending); }
+    writeHeartbeat();
+    if (!timers.heartbeat) { timers.heartbeat = setInterval(writeHeartbeat, HEARTBEAT_INTERVAL); }
   }
+
+  function stopHeartbeat() {
+    clearInterval(timers.heartbeat);
+    timers.heartbeat = 0;
+    store.remove(KEYS.running + TAB_ID);
+  }
+
+  // Calls back with true if some tab seems to have frozen while running a preview.
+  // A note that is still fresh may belong to a working tab, so wait to see if it updates.
+  function checkForFrozenTab(callback) {
+    function scan(final) {
+      var now = Date.now();
+      var frozen = false;
+      var waitFor = 0;
+      store.keysStartingWith(KEYS.running).forEach(function (key) {
+        var note = null;
+        try { note = JSON.parse(store.get(key)); } catch (e) { note = null; }
+        var age = note && typeof note.alive === 'number' ? now - note.alive : Infinity;
+        if (note && note.hidden) {
+          if (age > 86400000) { store.remove(key); }
+          return;
+        }
+        if (age > HEARTBEAT_STALE) {
+          frozen = true;
+          store.remove(key);
+        } else if (!final) {
+          waitFor = Math.max(waitFor, HEARTBEAT_STALE - age + 300);
+        }
+      });
+      if (frozen || !waitFor) {
+        callback(frozen);
+      } else {
+        setTimeout(function () { scan(true); }, waitFor);
+      }
+    }
+    scan(false);
+  }
+
+  document.addEventListener('visibilitychange', writeHeartbeat);
 
   function removeFrame() {
     if (state.frame) {
@@ -725,13 +821,12 @@
     updateRunIndicators();
     if (options.manual) { safeBanner.hidden = true; }
 
-    var oldRunId = state.runId;
     removeFrame();
-    clearPending(oldRunId);
 
     previewNotice.hidden = true;
     if (!code.trim()) {
       state.runId = null;
+      stopHeartbeat();
       previewEmpty.hidden = false;
       return;
     }
@@ -739,14 +834,15 @@
     // React/JSX source shows up as a wall of text in a browser, so explain instead.
     if (analyzeCode(code) === 'react') {
       state.runId = null;
+      stopHeartbeat();
       previewNotice.hidden = false;
       return;
     }
 
     var runId = newRunId();
     state.runId = runId;
-    state.runStartedAt = Date.now();
-    markPending(runId);
+    state.lastRunLines = countLines(code);
+    startHeartbeat();
 
     var frame = document.createElement('iframe');
     frame.setAttribute('sandbox', SANDBOX);
@@ -756,9 +852,6 @@
     frame.addEventListener('load', function () {
       if (state.runId !== runId) { return; }
       if (state.focusGuard && state.focusGuard.runId === runId) { state.focusGuard.until = Date.now() + 1500; }
-      // If pasted code freezes the page, this timer never fires, the marker stays,
-      // and the next visit opens paused instead of freezing again.
-      setTimeout(function () { clearPending(runId); }, PENDING_SETTLE_DELAY);
     });
 
     // Some creations grab keyboard focus when they start. If the person is typing
@@ -831,14 +924,13 @@
     if (!focusGuardActive()) { return; }
     setTimeout(function () {
       var frame = state.frame;
-      // If the pointer moved onto the preview after it started, the person probably clicked it.
-      var pointerCameIn = state.previewPointerEnteredAt > state.runStartedAt;
-      if (frame && document.activeElement === frame && !pointerCameIn && focusGuardActive()) {
+      // If the pointer is over the preview, the person may have clicked it on purpose.
+      var pointerOnPreview = frameHost.matches(':hover');
+      if (frame && document.activeElement === frame && !pointerOnPreview && focusGuardActive()) {
         editor.focus({ preventScroll: true });
       }
     }, 0);
   });
-  frameHost.addEventListener('pointerenter', function () { state.previewPointerEnteredAt = Date.now(); });
   document.addEventListener('pointerdown', function (event) {
     if (event.target !== editor) { state.focusGuard = null; }
   });
@@ -881,12 +973,12 @@
 
     var problem;
     if (data.type === 'error') {
-      var line = Number(data.line);
-      var message = friendlyMessage(String(data.message == null ? 'Unknown error' : data.message).slice(0, 500));
-      var lineOk = data.inPage === true && isFinite(line) && line >= 1 && line <= countLines(state.lastRunCode || '') && Math.floor(line) === line;
+      var line = typeof data.line === 'number' ? data.line : 0;
+      var message = friendlyMessage(typeof data.message === 'string' ? data.message.slice(0, 500) : 'Unknown error');
+      var lineOk = data.inPage === true && line >= 1 && line <= state.lastRunLines && Math.floor(line) === line;
       problem = { message: message, line: lineOk ? line : 0, advice: extraAdvice(message) };
     } else if (data.type === 'resource') {
-      var url = String(data.url == null ? '' : data.url).slice(0, 300);
+      var url = typeof data.url === 'string' ? data.url.slice(0, 300) : '';
       problem = {
         message: 'Could not load ' + (data.tag === 'link' ? 'a stylesheet' : 'a script') + (url ? ' from ' + url : '') + '.',
         line: 0,
@@ -962,9 +1054,24 @@
     return text.search(/<!doctype\s+html|<html[\s>]/i);
   }
 
-  function stripComments(text) { return text.replace(/<!--[\s\S]*?-->/g, '').trim(); }
+  // Removes <!-- comments --> with a plain scan (a regex can get very slow on odd input).
+  function stripComments(text) {
+    var out = '';
+    var i = 0;
+    for (;;) {
+      var open = text.indexOf('<!--', i);
+      if (open === -1) { out += text.slice(i); break; }
+      out += text.slice(i, open);
+      var close = text.indexOf('-->', open + 4);
+      if (close === -1) { break; }
+      i = close + 3;
+    }
+    return out.trim();
+  }
 
+  // Every pattern here runs in linear time, because it runs on every paste and every run.
   function analyzeCode(code) {
+    if (code.length > MAX_ANALYZE_LENGTH) { return null; }
     var text = code.trim();
     if (!text) { return null; }
     var start = findHtmlStart(text);
@@ -976,12 +1083,12 @@
       if (end < 0 && /<body[\s>]/i.test(text)) { return 'cut-off'; }
       return null;
     }
-    if (/^```/.test(text) || /```$/.test(text)) { return 'extra-text'; }
+    if (text.slice(0, 3) === '```' || text.slice(-3) === '```') { return 'extra-text'; }
     if (/<\/(body|html)>/i.test(text)) { return 'partial'; }
-    if (/^\s*import\s[^\n]*from\s*['"]|^\s*export\s+default\b|\bReactDOM\b|\buseState\s*\(/m.test(text) && !/<script[\s>]/i.test(text)) {
+    if (/^[ \t]*import[ \t][^\n]*from[ \t]*['"]|^[ \t]*export[ \t]+default\b|\bReactDOM\b|\buseState[ \t]*\(/m.test(text) && !/<script[\s>]/i.test(text)) {
       return 'react';
     }
-    if (!/<[a-z!][^>]*>/i.test(text)) { return 'not-html'; }
+    if (!/<[a-z!][^<>]*>/i.test(text)) { return 'not-html'; }
     return null;
   }
 
@@ -1142,8 +1249,11 @@
     // The file is exactly the code in the editor. The only possible addition is an
     // invisible UTF-8 marker, for files with emoji or accents but no charset line,
     // so they do not show garbled text when opened from disk.
-    var needsBom = /[^\x00-\x7F]/.test(code) && code.charCodeAt(0) !== 0xFEFF && !/<meta[^>]+charset/i.test(code);
-    var blob = new Blob(needsBom ? ['﻿', code] : [code], { type: 'text/html;charset=utf-8' });
+    // (Browsers only look for the charset line near the top, so only check there.)
+    var needsBom = /[^\x00-\x7F]/.test(code) && code.charCodeAt(0) !== 0xFEFF && !/<meta[^<>]*charset/i.test(code.slice(0, 1024));
+    // octet-stream, not text/html: a browser that ignored the download attribute would
+    // otherwise show the file as a page with this playground's origin.
+    var blob = new Blob(needsBom ? ['\uFEFF', code] : [code], { type: 'application/octet-stream' });
     var url = URL.createObjectURL(blob);
     var link = document.createElement('a');
     link.href = url;
@@ -1427,16 +1537,43 @@
   // A normal reload or close is not a freeze, so do not open paused next time.
   window.addEventListener('pagehide', function () {
     if (state.savePending) { saveNow(); }
-    clearPending();
+    stopHeartbeat();
+  });
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted && state.runId) { startHeartbeat(); }
   });
 
-  // Only when saving is impossible: warn before the code is lost.
+  // Only when the code could not be saved: warn before it is lost.
   window.addEventListener('beforeunload', function (event) {
-    if (!store.available && hasCode()) {
+    if ((!store.available || state.saveFailed || state.savePaused) && hasCode()) {
       event.preventDefault();
       event.returnValue = '';
     }
   });
+
+  // The playground open in two tabs: do not let one silently overwrite the other.
+  window.addEventListener('storage', function (event) {
+    if (event.key !== KEYS.code || event.newValue === null || event.newValue === editor.value) { return; }
+    state.otherTabCode = event.newValue;
+    state.savePaused = true;
+    clearTimeout(timers.save);
+    setSaveState('error', 'other-tab');
+    tabBanner.hidden = false;
+  });
+
+  function resolveOtherTab(useOther) {
+    var other = state.otherTabCode;
+    state.savePaused = false;
+    state.otherTabCode = null;
+    tabBanner.hidden = true;
+    setSaveState('idle');
+    if (useOther && other !== null) {
+      replaceCode(other, { undoMessage: 'Loaded the code from your other tab.' });
+    }
+    saveNow();
+  }
+  $('tabUseOther').addEventListener('click', function () { resolveOtherTab(true); });
+  $('tabKeepThis').addEventListener('click', function () { resolveOtherTab(false); });
 
   if (narrowMedia.addEventListener) {
     narrowMedia.addEventListener('change', function () {
@@ -1468,7 +1605,6 @@
 
     var params = new URLSearchParams(window.location.search);
     var safeRequested = params.has('safe') || /^#safe$/i.test(window.location.hash);
-    var pending = store.get(KEYS.pending);
     var saved = store.get(KEYS.code);
 
     if (saved !== null) { editor.value = saved; }
@@ -1481,25 +1617,27 @@
       setSaveState('saved');
     }
 
-    if (saved && saved.trim()) {
-      state.lastRunCode = '';
-      if (safeRequested || pending) {
+    if (!saved || !saved.trim()) {
+      checkForFrozenTab(function () { /* nothing to start; just tidy up old notes */ });
+      return;
+    }
+    state.lastRunCode = '';
+    updateHint();
+    checkForFrozenTab(function (frozen) {
+      if (editor.value !== saved) { return; } // the person already started something new
+      if (safeRequested || frozen) {
         state.autoRun = false;
         autoRunToggle.checked = false;
-        safeBannerText.textContent = pending
-          ? 'Last time, your creation did not finish starting. It may have frozen the page, so it has not been started again. Check the code (or ask Gemini to fix it), then press Run.'
+        safeBannerText.textContent = frozen
+          ? 'Last time, your creation stopped responding, so it has not been started again. Check the code (or ask Gemini to fix it), then press Run.'
           : 'Safe mode: your code has not been started. Press Run when you are ready.';
         safeBanner.hidden = false;
-        clearPending();
         updateRunIndicators();
       } else {
         run();
         toast('Welcome back! Your code from last time is still here.');
       }
-      updateHint();
-    } else {
-      clearPending();
-    }
+    });
   }
 
   init();

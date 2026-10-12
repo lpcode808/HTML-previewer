@@ -66,6 +66,14 @@
         </div>
       </div>
 
+      <div id="tabBanner" class="banner" role="alert" hidden>
+        <p><strong>You changed this code in another tab.</strong> Which version do you want to keep?</p>
+        <div class="hint-actions">
+          <button type="button" id="tabUseOther" class="btn btn-small btn-primary">Use the other tab's version</button>
+          <button type="button" id="tabKeepThis" class="btn btn-small">Keep this one</button>
+        </div>
+      </div>
+
       <div id="hint" class="hint" role="status" hidden>
         <p id="hintText" class="hint-text"></p>
         <div class="hint-actions">
@@ -231,7 +239,7 @@
         <ul>
           <li><strong>Blank preview?</strong> Make sure you copied <em>all</em> of the code. It usually starts with <code>&lt;!DOCTYPE html&gt;</code> and ends with <code>&lt;/html&gt;</code>.</li>
           <li><strong>A problem message under the preview?</strong> Click <strong>Copy for Gemini</strong>, paste it into Gemini, and paste the fixed code back here.</li>
-          <li><strong>Page frozen?</strong> Some code never stops running. Close the tab or reload the page. The playground will open paused so you can fix the code. You can also add <code>?safe</code> to the end of the web address to open it paused.</li>
+          <li><strong>Page frozen, or pop-up messages that never stop?</strong> Some code never stops running. Close the tab and open the playground again. It will open paused so you can fix the code. You can also add <code>?safe</code> to the end of the web address to open it paused.</li>
           <li><strong>Images or fonts missing?</strong> Those come from the internet. Check your connection.</li>
         </ul>
       </section>
@@ -242,9 +250,11 @@
         <p>Being honest about the limits:</p>
         <ul>
           <li>Code in the preview can still use the internet: it can load images, fonts, and code from other websites, and it can send information to them. Only run code you got from a source you trust.</li>
-          <li>Code can still slow down or freeze your browser, for example with a loop that never ends.</li>
+          <li>Code can still slow down or freeze your browser, for example with a loop that never ends, or keep showing pop-up messages.</li>
+          <li>When you click inside your creation, it can put text on your clipboard, like any website. Never paste computer commands that a web page gives you into other programs.</li>
+          <li>The problem messages under the preview come from your creation's own code, so they are only as trustworthy as that code.</li>
           <li>Anything your creation saves while you preview it (like a high score) is forgotten each time the preview restarts. In the downloaded file, saving works normally.</li>
-          <li>Some browser features are blocked in the preview: camera, microphone, location, cookies, and opening links that need a sign-in. Pop-up windows and links in new tabs open with the same restrictions. These usually work in the downloaded file.</li>
+          <li>Some browser features are blocked in the preview: camera, microphone, location, cookies, saving files to your computer, and links that need a sign-in. Pop-up windows and links in new tabs open with the same restrictions. These usually work in the downloaded file.</li>
           <li>Links to other files on your computer (like <code>picture.png</code>) do not work, because the playground only has the one file you pasted.</li>
         </ul>
         <p>This website has no accounts, no tracking, and no analytics. Your code never leaves your browser unless the code itself contacts the internet.</p>
