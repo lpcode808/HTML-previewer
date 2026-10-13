@@ -27,6 +27,7 @@
   var PREVIEW_STORAGE_MAX_KEY_LEN = 500;
   var PREVIEW_STORAGE_MAX_VALUE_LEN = 100000;
   var PREVIEW_STORAGE_MAX_JSON = 2000000;
+  var PREVIEW_STORAGE_SAVE_DELAY = 300; // ms; batches creations that save many times a second
   var AUTO_RUN_DELAY = 900;       // ms of quiet typing before the preview restarts
   var SAVE_DELAY = 400;           // ms of quiet typing before autosaving
   var HEARTBEAT_INTERVAL = 1000;  // ms between "this tab is still alive" notes while a preview runs
@@ -203,8 +204,9 @@
   // It runs inside the sandbox, before the pasted code, and:
   //  - reports uncaught errors and failed script/stylesheet loads to this page
   //    (as plain data that we only ever display as text), and
-  //  - provides in-memory stand-ins for localStorage/sessionStorage, which a
-  //    sandboxed page cannot use, so creations that save scores still work.
+  //  - provides stand-ins for localStorage/sessionStorage, which a sandboxed
+  //    page cannot use; localStorage is copied to this page (see "Preview storage"),
+  //  - reports clicks on download links, which the sandbox blocks.
   // It is turned into a single line so the pasted code keeps its line numbers.
   // Keep it free of "//" comments and of the text "</script".
   // ---------------------------------------------------------------------------
@@ -212,13 +214,16 @@
   function previewHelper(RUN, SEED) {
     var target = window.parent;
     var sent = 0;
-    function send(type, detail) {
-      if (sent >= 80) { return; }
-      sent += 1;
+    function post(detail) {
       detail.htmlPlayground = 1;
-      detail.type = type;
       detail.run = RUN;
       try { target.postMessage(detail, '*'); } catch (e) { }
+    }
+    function send(type, detail) {
+      if (sent >= 60) { return; }
+      sent += 1;
+      detail.type = type;
+      post(detail);
     }
     function describe(value) {
       try {
@@ -258,12 +263,16 @@
           });
         } catch (e) { }
       }
-      function sync(op, key) {
-        if (!syncLocal) { return; }
-        var payload = { op: op };
-        if (key !== undefined) { payload.key = String(key).slice(0, 500); }
-        if (op === 'set') { payload.value = map.get(String(key)); }
-        send('preview-storage', payload);
+      var syncQueued = false;
+      function sync() {
+        if (!syncLocal || syncQueued) { return; }
+        syncQueued = true;
+        setTimeout(function () {
+          syncQueued = false;
+          var items = Object.create(null);
+          map.forEach(function (value, key) { items[key] = value; });
+          post({ type: 'preview-storage', items: items });
+        }, 0);
       }
       var api = {
         getItem: function (key) { key = String(key); return map.has(key) ? map.get(key) : null; },
@@ -271,10 +280,10 @@
           key = String(key);
           value = String(value);
           map.set(key, value);
-          sync('set', key);
+          sync();
         },
-        removeItem: function (key) { key = String(key); map.delete(key); sync('remove', key); },
-        clear: function () { map.clear(); sync('clear'); },
+        removeItem: function (key) { key = String(key); map.delete(key); sync(); },
+        clear: function () { map.clear(); sync(); },
         key: function (index) { var all = Array.from(map.keys()); return index >= 0 && index < all.length ? all[index] : null; }
       };
       return new Proxy(api, {
@@ -286,14 +295,14 @@
         set: function (obj, prop, value) {
           if (typeof prop !== 'symbol') {
             map.set(prop, String(value));
-            sync('set', prop);
+            sync();
           }
           return true;
         },
         has: function (obj, prop) { return map.has(prop) || prop in api; },
         deleteProperty: function (obj, prop) {
           map.delete(prop);
-          sync('remove', prop);
+          sync();
           return true;
         },
         ownKeys: function () { return Array.from(map.keys()); },
@@ -482,6 +491,13 @@
     return store.set(previewStorageKey(code), json).ok;
   }
 
+  function flushPreviewStorage() {
+    clearTimeout(timers.previewStorage);
+    if (!state.previewStoragePending) { return; }
+    state.previewStoragePending = false;
+    savePreviewStorage(state.previewStorageCode, state.previewStorage);
+  }
+
   function clearPreviewStorageForCode(code) {
     store.remove(previewStorageKey(code));
   }
@@ -511,7 +527,8 @@
     savePaused: false,      // another tab changed the saved code; wait for the person to choose
     otherTabCode: null,
     previewStorage: Object.create(null),
-    previewStorageCode: ''
+    previewStorageCode: '',
+    previewStoragePending: false
   };
   var timers = {};
   var isMac = /Mac|iPhone|iPad|iPod/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent);
@@ -951,6 +968,7 @@
     var runId = newRunId();
     state.runId = runId;
     state.lastRunLines = countLines(code);
+    flushPreviewStorage();
     state.previewStorageCode = code;
     state.previewStorage = loadPreviewStorage(code);
     startHeartbeat();
@@ -1097,22 +1115,12 @@
         advice: 'This part comes from the internet. Check the connection, or ask Gemini to include it in the file.'
       };
     } else if (data.type === 'preview-storage') {
+      // A full copy of the creation's localStorage, sent once per burst of writes.
       if (editor.value !== state.previewStorageCode) { return; }
-      var op = data.op;
-      if (op === 'set') {
-        var sKey = typeof data.key === 'string' ? data.key.slice(0, PREVIEW_STORAGE_MAX_KEY_LEN) : '';
-        var sVal = typeof data.value === 'string' ? data.value.slice(0, PREVIEW_STORAGE_MAX_VALUE_LEN) : '';
-        if (!sKey) { return; }
-        state.previewStorage[sKey] = sVal;
-      } else if (op === 'remove') {
-        var rKey = typeof data.key === 'string' ? data.key.slice(0, PREVIEW_STORAGE_MAX_KEY_LEN) : '';
-        if (rKey) { delete state.previewStorage[rKey]; }
-      } else if (op === 'clear') {
-        state.previewStorage = Object.create(null);
-      } else {
-        return;
-      }
-      savePreviewStorage(state.previewStorageCode, state.previewStorage);
+      state.previewStorage = sanitizePreviewStorage(data.items);
+      state.previewStoragePending = true;
+      clearTimeout(timers.previewStorage);
+      timers.previewStorage = setTimeout(flushPreviewStorage, PREVIEW_STORAGE_SAVE_DELAY);
       updateClearPreviewDataButton();
     } else if (data.type === 'download-blocked') {
       showDownloadBlockedNotice();
@@ -1144,6 +1152,8 @@
       confirmLabel: 'Clear preview data'
     }).then(function (ok) {
       if (!ok) { return; }
+      clearTimeout(timers.previewStorage);
+      state.previewStoragePending = false;
       clearPreviewStorageForCode(editor.value);
       state.previewStorage = Object.create(null);
       updateClearPreviewDataButton();
@@ -1735,6 +1745,7 @@
   // A normal reload or close is not a freeze, so do not open paused next time.
   window.addEventListener('pagehide', function () {
     if (state.savePending) { saveNow(); }
+    flushPreviewStorage();
     stopHeartbeat();
   });
   window.addEventListener('pageshow', function (event) {

@@ -37,7 +37,7 @@ The suite starts a plain static file server for the repository, as GitHub Pages 
 | 9d | Storage blocked | Shows "Not saved on this device". Everything else works. | Pass |
 | 9e | Paste button | Reads the clipboard, replaces the code, and offers Undo. | Pass |
 | 9g | Paste without clipboard permission | The Paste button shows a plain-language message to use Ctrl/⌘+V (or tap-and-hold on a phone). The editor stays unchanged. | Pass |
-| 9h | Preview `localStorage` | Data survives a full page reload and **Restart**, stays separate from the playground's own storage keys, and **Clear preview data** resets it. | Pass |
+| 9h | Preview `localStorage` | Data survives a full page reload and **Restart** (including a creation that saves 150 times per run), stays separate from the playground's own storage keys, and **Clear preview data** resets it. | Pass |
 | 9i | Blocked downloads | A programmatic in-preview download shows the banner and a toast pointing people to **Download**. | Pass |
 | 10 | Static hosting | Works from a plain static server **and** straight from disk (`file://`). No server logic is used. | Pass |
 

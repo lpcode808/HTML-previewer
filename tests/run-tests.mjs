@@ -816,9 +816,11 @@ await test('9d. Storage blocked: the playground still works and says it cannot s
 });
 
 await test('9g. Paste button without clipboard permission explains Ctrl/Cmd+V', async () => {
-  const context = await browser.newContext({
-    viewport: { width: 1200, height: 800 }
-    // deliberate: no clipboard-read permission
+  const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  // Headless Chromium leaves an unpermitted read pending instead of refusing it,
+  // so act like a browser where the person said no.
+  await context.addInitScript(() => {
+    navigator.clipboard.readText = () => Promise.reject(new DOMException('Read permission denied.', 'NotAllowedError'));
   });
   const { page } = await openApp({ context });
   await page.click('#emptyPasteBtn');
@@ -831,41 +833,47 @@ await test('9g. Paste button without clipboard permission explains Ctrl/Cmd+V', 
 
 await test('9h. Preview localStorage survives reload and Restart; cannot read playground keys', async () => {
   const { context, page } = await openApp();
+  // Saves 150 times per run, like a game or a form that saves on every keystroke.
   const doc = `<!DOCTYPE html><html><body>
 <p id="out">empty</p>
 <script>
   var n = Number(localStorage.getItem('count') || '0') + 1;
+  for (var i = 1; i <= 150; i++) { localStorage.setItem('writes', String(i)); }
   localStorage.setItem('count', String(n));
   document.getElementById('out').textContent = 'count=' + n;
   document.body.dataset.parentProbe = String(localStorage.getItem('html-playground:v1:code'));
 <\/script></body></html>`;
-  await setCode(page, doc);
-  await wait(1300);
-  let frame = await previewFrame(page);
-  assert(await frame.textContent('#out') === 'count=1', 'first run sets count');
-  assert(await frame.evaluate(() => document.body.dataset.parentProbe) === 'null', 'no access to playground storage keys');
+  // The sandboxed preview has its own origin, so read it through Playwright's frame.
+  async function countAfter(action) {
+    const before = await runs(page);
+    await action();
+    const frame = await previewFrame(page, 15000, before);
+    await frame.waitForFunction(() => document.getElementById('out').textContent !== 'empty');
+    await wait(500);  // let the batched save land
+    return { frame, text: await frame.textContent('#out') };
+  }
+  let r = await countAfter(() => setCode(page, doc));
+  assert(r.text === 'count=1', 'first run sets count: ' + r.text);
+  assert(await r.frame.evaluate(() => document.body.dataset.parentProbe) === 'null', 'no access to playground storage keys');
 
   await page.reload();
-  await page.waitForFunction(() => {
-    const iframe = document.querySelector('#frameHost iframe');
-    return iframe && iframe.contentDocument && iframe.contentDocument.getElementById('out')?.textContent === 'count=2';
-  }, null, { timeout: 15000 });
-  frame = await previewFrame(page, 15000);
+  let frame = await previewFrame(page, 15000);  // a reload clears the run counter, so take the first preview
+  await frame.waitForFunction(() => document.getElementById('out').textContent !== 'empty');
+  assert(await frame.textContent('#out') === 'count=2', 'reload keeps count: ' + await frame.textContent('#out'));
+  assert(await frame.evaluate(() => localStorage.getItem('writes')) === '150', 'every save is kept, not just the first few');
+  await page.evaluate(() => {
+    window.__runs = 0;
+    new MutationObserver((records) => {
+      for (const rec of records) { for (const n of rec.addedNodes) { if (n.tagName === 'IFRAME') { window.__runs += 1; } } }
+    }).observe(document.getElementById('frameHost'), { childList: true });
+  });
+  await wait(500);
 
-  await page.click('#runBtn');
-  await page.waitForFunction(() => {
-    const iframe = document.querySelector('#frameHost iframe');
-    return iframe && iframe.contentDocument && iframe.contentDocument.getElementById('out')?.textContent === 'count=3';
-  }, null, { timeout: 15000 });
-  frame = await previewFrame(page, 15000);
+  r = await countAfter(() => page.click('#runBtn'));
+  assert(r.text === 'count=3', 'Restart keeps count: ' + r.text);
 
-  await page.click('#clearPreviewDataBtn');
-  await page.click('#confirmOk');
-  await page.waitForFunction(() => {
-    const iframe = document.querySelector('#frameHost iframe');
-    return iframe && iframe.contentDocument && iframe.contentDocument.getElementById('out')?.textContent === 'count=1';
-  }, null, { timeout: 15000 });
-  frame = await previewFrame(page, 15000);
+  r = await countAfter(async () => { await page.click('#clearPreviewDataBtn'); await page.click('#confirmOk'); });
+  assert(r.text === 'count=1', 'Clear preview data resets: ' + r.text);
   await context.close();
 });
 
