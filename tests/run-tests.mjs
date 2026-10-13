@@ -93,11 +93,18 @@ async function setCode(page, code) {
   }, code);
 }
 
+async function focusEditor(page) {
+  await page.evaluate(() => document.getElementById('editor').focus());
+}
+
 // A real paste: clipboard -> Ctrl+V into the editor.
 async function pasteCode(page, code) {
   await page.evaluate((value) => navigator.clipboard.writeText(value), code);
-  await page.click('#editor');
-  await page.keyboard.press('Control+A');
+  await page.evaluate(() => {
+    const editor = document.getElementById('editor');
+    editor.focus();
+    editor.setSelectionRange(0, editor.value.length);
+  });
   await page.keyboard.press('Control+V');
 }
 
@@ -257,7 +264,7 @@ await test('3. Editing updates the preview after a pause, without restarting on 
   const before = await runs(page);
 
   // Type 12 characters quickly: should cause exactly one restart.
-  await page.click('#editor');
+  await focusEditor(page);
   await page.keyboard.press('Control+End');
   await page.keyboard.type('<p id="p">abcdefg</p>', { delay: 20 });
   await wait(300);
@@ -288,7 +295,7 @@ await test('3. Editing updates the preview after a pause, without restarting on 
 
   // Ctrl+Enter runs too.
   const runsBefore = await runs(page);
-  await page.click('#editor');
+  await focusEditor(page);
   await page.keyboard.press('Control+Enter');
   assert(await runs(page) === runsBefore + 1, 'Ctrl+Enter runs');
   await context.close();
@@ -368,7 +375,7 @@ await test('4. Preview cannot reach the parent page, its storage, or top-level n
 
 await test('5. Refreshing the page brings back the saved code', async () => {
   const { context, page } = await openApp();
-  await page.click('#editor');
+  await focusEditor(page);
   await page.keyboard.type('<!DOCTYPE html><h1 id="h">Remember me</h1>');
   await wait(700);
   assert((await page.textContent('#saveStatus')).includes('Saved'), 'saved indicator: ' + await page.textContent('#saveStatus'));
@@ -380,7 +387,7 @@ await test('5. Refreshing the page brings back the saved code', async () => {
   assert((await page.textContent('#toastText')).includes('Welcome back'), 'welcome-back message');
 
   // Reload right after typing (before the save delay) still keeps the code.
-  await page.click('#editor');
+  await focusEditor(page);
   await page.keyboard.press('Control+End');
   await page.keyboard.type('!');
   await page.reload();
@@ -683,7 +690,7 @@ await test('9. Clear and Sample ask first; Undo works; keyboard controls work', 
   assert(outline.startsWith('solid') && parseFloat(outline.split(' ')[1]) >= 2, 'focus ring visible: ' + outline);
 
   // Ctrl+S
-  await page.click('#editor');
+  await focusEditor(page);
   await page.keyboard.press('Control+s');
   assert((await page.textContent('#toastText')).includes('Saved on this device'), 'Ctrl+S explains saving');
 
@@ -713,7 +720,7 @@ await test('9b. Keyboard focus stays in the editor when a creation grabs focus o
   const { context, page } = await openApp();
   await setCode(page, '<!DOCTYPE html><input id="grab"><script>document.getElementById("grab").focus(); setTimeout(function(){ document.getElementById("grab").focus(); }, 300);<\/script>');
   await wait(1300);
-  await page.click('#editor');
+  await focusEditor(page);
   await page.keyboard.press('Control+End');
   await page.keyboard.type(' ');
   await wait(1700); // auto-run happens; creation tries to take focus
@@ -781,7 +788,7 @@ await test('9f. Pasting a new version into old code replaces it (instead of mixi
   await wait(1200);
   // Click into the middle of the old code (no select-all) and paste the new version.
   await page.evaluate((text) => navigator.clipboard.writeText(text), v2);
-  await page.click('#editor');
+  await focusEditor(page);
   await page.evaluate(() => document.getElementById('editor').setSelectionRange(20, 20));
   const before = await runs(page);
   await page.keyboard.press('Control+V');
@@ -794,7 +801,7 @@ await test('9f. Pasting a new version into old code replaces it (instead of mixi
 
   // Pasting a small piece (not a whole page) still inserts at the cursor.
   await page.evaluate((text) => navigator.clipboard.writeText(text), '<p>extra</p>');
-  await page.click('#editor');
+  await focusEditor(page);
   await page.evaluate(() => { const e = document.getElementById('editor'); const i = e.value.indexOf('</body>'); e.setSelectionRange(i, i); });
   await page.keyboard.press('Control+V');
   assert((await page.inputValue('#editor')).includes('<p>extra</p></body>'), 'snippet inserted at the cursor');
@@ -879,13 +886,77 @@ await test('9h. Preview localStorage survives reload and Restart; cannot read pl
 
 await test('9i. In-preview download attempt shows a notice', async () => {
   const { context, page } = await openApp();
+  const whenBanner = page.evaluate(() => new Promise((resolve) => {
+    const banner = document.getElementById('downloadBlockedBanner');
+    if (!banner.hidden) {
+      resolve(document.getElementById('toastText').textContent);
+      return;
+    }
+    const obs = new MutationObserver(() => {
+      if (!banner.hidden) {
+        obs.disconnect();
+        resolve(document.getElementById('toastText').textContent);
+      }
+    });
+    obs.observe(banner, { attributes: true, attributeFilter: ['hidden'] });
+    setTimeout(() => { obs.disconnect(); resolve('__timeout__'); }, 5000);
+  }));
   await setCode(page, `<!DOCTYPE html><body><a id="dl" download="x.txt" href="data:text/plain,hi">Save</a>
 <script>document.getElementById('dl').click();<\/script></body>`);
-  await wait(1300);
-  await previewFrame(page);
-  await page.waitForSelector('#downloadBlockedBanner:not([hidden])', { timeout: 3000 });
+  const toastWhenBanner = await whenBanner;
+  assert(toastWhenBanner !== '__timeout__', 'download banner appeared');
+  assert(!toastWhenBanner || !/Downloads are turned off/i.test(toastWhenBanner), 'banner appears before the delayed toast: ' + toastWhenBanner);
+  assert(await page.$eval('#downloadBlockedBanner', (el) => el.classList.contains('banner-download-blocked')), 'download banner uses prominent styling');
+  const tops = await page.evaluate(() => {
+    const b = document.getElementById('downloadBlockedBanner').getBoundingClientRect().top;
+    const f = document.getElementById('frameHost').getBoundingClientRect().top;
+    return { banner: b, frame: f };
+  });
+  assert(tops.banner < tops.frame, 'banner sits above the preview frame');
+  await wait(500);
   const toast = await page.textContent('#toastText');
   assert(/Downloads are turned off|Download above/i.test(toast), 'toast explains downloads: ' + toast);
+  await previewFrame(page);
+  await context.close();
+});
+
+await test('9j. Gemini chat prose hint vs generic non-HTML message', async () => {
+  const { context, page } = await openApp();
+  const prose = 'Here is your conference people tracker! I built a single-page app with contacts and filters. Let me know if you want any changes.';
+  await pasteCode(page, prose);
+  await page.waitForSelector('#hint:not([hidden])');
+  const hint = await page.textContent('#hintText');
+  assert(hint.includes("Gemini's chat reply") && hint.includes('Canvas'), 'chat prose hint: ' + hint);
+  assert(!hint.includes('complete web page'), 'not the generic non-HTML message');
+
+  await pasteCode(page, 'body { color: red; }\n.box { padding: 4px; margin: 2px; }');
+  await page.waitForSelector('#hint:not([hidden])');
+  assert((await page.textContent('#hintText')).includes('complete web page'), 'CSS-only still gets the generic message');
+  await context.close();
+});
+
+await test('9k. iPhone user agent shows the two-tap paste hint near Paste', async () => {
+  const { context, page } = await openApp({
+    contextOptions: {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+    }
+  });
+  const hints = await page.$$eval('.ios-paste-hint', (nodes) => nodes.map((n) => ({ hidden: n.hidden, text: n.textContent })));
+  assert(hints.length >= 2, 'hints in toolbar and empty state');
+  assert(hints.every((h) => !h.hidden && /Paste bubble/i.test(h.text)), 'iOS hints visible: ' + JSON.stringify(hints));
+  await page.click('#helpBtn');
+  assert((await page.textContent('#help-trouble')).includes('little Paste bubble'), 'help mentions the iOS two-tap flow');
+  await context.close();
+});
+
+await test('8d. Paste button at phone width switches to the Preview tab', async () => {
+  const { context, page } = await openApp({ viewport: { width: 390, height: 740 }, contextOptions: { isMobile: true, hasTouch: true } });
+  await page.evaluate(() => navigator.clipboard.writeText('<!DOCTYPE html><h1 id="pb">Paste btn</h1>'));
+  await page.click('#emptyPasteBtn');
+  await page.waitForSelector('#previewPane', { state: 'visible', timeout: 3000 });
+  assert(await page.getAttribute('#tabPreview', 'aria-selected') === 'true', 'preview tab selected after Paste button');
+  const frame = await previewFrame(page);
+  assert(await frame.textContent('#pb') === 'Paste btn', 'preview runs after toolbar paste on phone');
   await context.close();
 });
 

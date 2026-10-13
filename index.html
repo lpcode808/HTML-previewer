@@ -47,10 +47,13 @@
       <div class="pane-header">
         <h2 id="codeHeading"><span class="step" aria-hidden="true">1</span> Your code</h2>
         <div class="pane-actions">
-          <button type="button" id="pasteBtn" class="btn" title="Replace all of the code with what you copied">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4h6v3H9zM8 5.5H6.5A1.5 1.5 0 0 0 5 7v12a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V7a1.5 1.5 0 0 0-1.5-1.5H16"/></svg>
-            Paste
-          </button>
+          <div class="paste-cluster">
+            <button type="button" id="pasteBtn" class="btn" title="Replace all of the code with what you copied">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4h6v3H9zM8 5.5H6.5A1.5 1.5 0 0 0 5 7v12a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V7a1.5 1.5 0 0 0-1.5-1.5H16"/></svg>
+              Paste
+            </button>
+            <p class="ios-paste-hint" hidden>On iPhone, tap <strong>Paste</strong> here, then tap the little Paste bubble that pops up.</p>
+          </div>
           <button type="button" id="copyBtn" class="btn" title="Copy all of the code, for example to send back to Gemini">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>
             <span>Copy<span class="long-label"> code</span></span>
@@ -90,10 +93,13 @@
           <p id="emptyTitle" class="empty-title">Paste your HTML from Gemini here</p>
           <p class="empty-sub">Click in this box, then press <kbd id="pasteKeys">Ctrl + V</kbd></p>
           <div class="empty-actions">
-            <button type="button" id="emptyPasteBtn" class="btn btn-primary btn-large">
-              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4h6v3H9zM8 5.5H6.5A1.5 1.5 0 0 0 5 7v12a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V7a1.5 1.5 0 0 0-1.5-1.5H16"/></svg>
-              Paste what I copied
-            </button>
+            <div class="paste-cluster paste-cluster-large">
+              <button type="button" id="emptyPasteBtn" class="btn btn-primary btn-large">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4h6v3H9zM8 5.5H6.5A1.5 1.5 0 0 0 5 7v12a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V7a1.5 1.5 0 0 0-1.5-1.5H16"/></svg>
+                Paste what I copied
+              </button>
+              <p class="ios-paste-hint" hidden>On iPhone, tap <strong>Paste what I copied</strong>, then tap the little Paste bubble that pops up.</p>
+            </div>
             <button type="button" id="emptySampleBtn" class="btn btn-large">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 18.5 12 15.6 7 18.5l1.4-5.7L4 9l5.8-.7z"/></svg>
               Try a sample first
@@ -141,7 +147,7 @@
         <button type="button" id="safeRunBtn" class="btn btn-small btn-run">Run it now</button>
       </div>
 
-      <div id="downloadBlockedBanner" class="banner banner-info" role="status" hidden>
+      <div id="downloadBlockedBanner" class="banner banner-download-blocked" role="alert" hidden>
         <p><strong>Downloads are off in the preview.</strong> Buttons inside your creation cannot save files here. Use <strong>Download</strong> at the top to save your code, or open that file in your browser and try the button again.</p>
       </div>
 
@@ -219,7 +225,7 @@
         <h3>Get started in three steps</h3>
         <ol class="steps">
           <li><strong>Ask Gemini</strong> to make something, then copy the code it gives you.</li>
-          <li><strong>Paste</strong> it into the <em>Your code</em> box. Your creation appears next to it, ready to use (on a phone, tap <em>Preview</em>).</li>
+          <li><strong>Paste</strong> it into the <em>Your code</em> box (or click <strong>Paste</strong>). Your creation appears next to it, ready to use (on a phone, it switches to the <em>Preview</em> tab after you paste).</li>
           <li><strong>Change it</strong>: edit the code yourself, or ask Gemini for changes and paste the new version. A new version replaces the old one by itself. When you are happy, click <strong>Download</strong>.</li>
         </ol>
       </section>
@@ -245,6 +251,9 @@
       <section id="help-trouble">
         <h3>If something goes wrong</h3>
         <ul>
+          <li><strong>On iPhone or iPad?</strong> Tap <strong>Paste</strong>, then tap the little Paste bubble that pops up. It takes two taps.</li>
+          <li><strong>Chrome asks to see copied text?</strong> Click <strong>Allow</strong>. If you click Block, the Paste button will not work until you change the site permission.</li>
+          <li><strong>Wrong paste — chat words instead of code?</strong> You may have used Gemini's chat <strong>Copy</strong> button. Open the code view in Canvas, click inside the code, select all, and copy again.</li>
           <li><strong>Blank preview?</strong> Make sure you copied <em>all</em> of the code. It usually starts with <code>&lt;!DOCTYPE html&gt;</code> and ends with <code>&lt;/html&gt;</code>.</li>
           <li><strong>A problem message under the preview?</strong> Click <strong>Copy for Gemini</strong>, paste it into Gemini, and paste the fixed code back here.</li>
           <li><strong>Page frozen, or pop-up messages that never stop?</strong> Some code never stops running. Close the tab and open the playground again. It will open paused so you can fix the code. You can also add <code>?safe</code> to the end of the web address to open it paused.</li>
@@ -261,7 +270,7 @@
           <li>Code can still slow down or freeze your browser, for example with a loop that never ends, or keep showing pop-up messages.</li>
           <li>When you click inside your creation, it can put text on your clipboard, like any website. Never paste computer commands that a web page gives you into other programs.</li>
           <li>The problem messages under the preview come from your creation's own code, so they are only as trustworthy as that code.</li>
-          <li>While you preview, things your creation saves with <code>localStorage</code> (like contacts or high scores) are kept on this device for <em>this</em> code, even if you refresh or press Restart. They are separate from the playground's own saved code. Use <strong>Clear preview data</strong> to wipe them. <code>sessionStorage</code> still resets when the preview restarts. In the downloaded file, saving works normally.</li>
+          <li>While you preview, things your creation saves with <code>localStorage</code> (like contacts or high scores) are kept on this device for <em>this</em> code, even if you refresh or press Restart. They are separate from the playground's own saved code. On the <strong>Preview</strong> tab, use <strong>Clear preview data</strong> to wipe them (it is not on the Code tab). <code>sessionStorage</code> still resets when the preview restarts. In the downloaded file, saving works normally.</li>
           <li>Some browser features are blocked in the preview: camera, microphone, location, cookies, saving files to your computer, and links that need a sign-in. If a save or download button inside your creation seems to work but nothing appears in Downloads, use the playground's <strong>Download</strong> instead. Pop-up windows and links in new tabs open with the same restrictions. These usually work in the downloaded file.</li>
           <li>Links to other files on your computer (like <code>picture.png</code>) do not work, because the playground only has the one file you pasted.</li>
         </ul>
