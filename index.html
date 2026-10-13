@@ -129,12 +129,20 @@
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
             <span id="fullscreenLabel">Full screen</span>
           </button>
+          <button type="button" id="clearPreviewDataBtn" class="btn" title="Remove data your creation saved in the preview (scores, form entries, and so on)" hidden>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M9 7V5h6v2M8 7l1 14h6l1-14"/></svg>
+            Clear preview data
+          </button>
         </div>
       </div>
 
       <div id="safeBanner" class="banner" role="alert" hidden>
         <p><strong>Paused to keep things safe.</strong> <span id="safeBannerText"></span></p>
         <button type="button" id="safeRunBtn" class="btn btn-small btn-run">Run it now</button>
+      </div>
+
+      <div id="downloadBlockedBanner" class="banner banner-info" role="status" hidden>
+        <p><strong>Downloads are off in the preview.</strong> Buttons inside your creation cannot save files here. Use <strong>Download</strong> at the top to save your code, or open that file in your browser and try the button again.</p>
       </div>
 
       <div id="frameHost" class="frame-host">
@@ -253,8 +261,8 @@
           <li>Code can still slow down or freeze your browser, for example with a loop that never ends, or keep showing pop-up messages.</li>
           <li>When you click inside your creation, it can put text on your clipboard, like any website. Never paste computer commands that a web page gives you into other programs.</li>
           <li>The problem messages under the preview come from your creation's own code, so they are only as trustworthy as that code.</li>
-          <li>Anything your creation saves while you preview it (like a high score) is forgotten each time the preview restarts. In the downloaded file, saving works normally.</li>
-          <li>Some browser features are blocked in the preview: camera, microphone, location, cookies, saving files to your computer, and links that need a sign-in. Pop-up windows and links in new tabs open with the same restrictions. These usually work in the downloaded file.</li>
+          <li>While you preview, things your creation saves with <code>localStorage</code> (like contacts or high scores) are kept on this device for <em>this</em> code, even if you refresh or press Restart. They are separate from the playground's own saved code. Use <strong>Clear preview data</strong> to wipe them. <code>sessionStorage</code> still resets when the preview restarts. In the downloaded file, saving works normally.</li>
+          <li>Some browser features are blocked in the preview: camera, microphone, location, cookies, saving files to your computer, and links that need a sign-in. If a save or download button inside your creation seems to work but nothing appears in Downloads, use the playground's <strong>Download</strong> instead. Pop-up windows and links in new tabs open with the same restrictions. These usually work in the downloaded file.</li>
           <li>Links to other files on your computer (like <code>picture.png</code>) do not work, because the playground only has the one file you pasted.</li>
         </ul>
         <p>This website has no accounts, no tracking, and no analytics. Your code never leaves your browser unless the code itself contacts the internet.</p>

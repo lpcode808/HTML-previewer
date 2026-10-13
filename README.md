@@ -60,9 +60,10 @@ To update the site later, push to the same branch. Pages redeploys on its own.
 - **The sandbox has no `allow-top-navigation` or `allow-popups-to-escape-sandbox`.** The preview can't replace the playground page, and any pop-up it opens keeps the same restrictions.
 - **The sandbox has no `allow-downloads`.** Without it, a pasted page could save files to the Downloads folder without a click.
 - **The `allow` attribute grants only `fullscreen; clipboard-write; autoplay`.** Camera, microphone and location aren't granted.
-- **A small helper runs inside the preview only, never in downloads.** It's inserted right after `<!DOCTYPE …>` on the same line, so line numbers and standards mode stay the same. It does two things:
+- **A small helper runs inside the preview only, never in downloads.** It's inserted right after `<!DOCTYPE …>` on the same line, so line numbers and standards mode stay the same. It does three things:
   1. It reports uncaught errors and failed script/stylesheet loads to the parent. The parent accepts a message only from the current iframe's window, with the current run's id, and only reads string and number fields. It only ever shows the message as plain text. Messages can't trigger any action. The run id isn't a secret; it only filters out messages from earlier runs.
-  2. It installs in-memory stand-ins for `localStorage`/`sessionStorage`. A sandboxed page would otherwise throw on access, and many Gemini apps save scores that way.
+  2. It installs stand-ins for `localStorage`/`sessionStorage`. A sandboxed page would otherwise throw on access. For `localStorage`, the playground copies what your creation saves into its own namespaced storage (keyed by a fingerprint of your code) and puts it back on the next run. `sessionStorage` stays in-memory only. Your creation still cannot read the playground's saved code.
+  3. It tells the parent when the creation tries to download a file, so the playground can explain that **Download** at the top is the way to save.
 - **Freeze recovery.**
   - While a preview runs, the tab writes a "still alive" note to localStorage every second. Each tab has its own note.
   - A normal close removes the note. If pasted code freezes the tab, the notes stop.
@@ -80,7 +81,8 @@ To update the site later, push to the same branch. Pages redeploys on its own.
 
 - **The preview can still use the network.** Pasted code can load images, fonts, and libraries from other sites, and it can send data to them. Only run code you trust. Without internet access, CDN-based code won't work.
 - **Code can still use lots of CPU or memory.** An endless loop can freeze the tab, because in many browsers the preview shares the page's thread. Freeze recovery (above) gets the participant back in, but it can't stop the freeze itself.
-- **Saved data inside a creation is temporary in the preview.** `localStorage`/`sessionStorage` work but are forgotten on each restart. Cookies, IndexedDB, camera, microphone, location, and file downloads aren't available. These usually work normally in the downloaded file.
+- **Saved data in the preview.** `localStorage` inside your creation is remembered on this device for the code you pasted (refresh and **Restart** keep it). It is stored separately from the playground's own saved code; use **Clear preview data** to wipe it. `sessionStorage` still resets when the preview restarts. Cookies, IndexedDB, camera, microphone, location, and file downloads aren't available in the preview. These usually work normally in the downloaded file.
+- **In-app download buttons** cannot save files in the preview (the sandbox blocks it). The playground shows a notice; use **Download** at the top for your HTML file.
 - **Clipboard and pop-up messages.** A creation can write to the clipboard when clicked (`clipboard-write` is allowed so "Copy" buttons work), and it can show `alert()` dialogs, including endless ones. The Help text tells people never to paste commands from a web page into other programs.
 - **Problem messages come from the creation itself.** Pasted code can fake them, so the problem bar is labeled as coming from "your creation".
 - **Pages without `<!DOCTYPE html>`.** The preview always uses standards mode, because `srcdoc` documents are never in quirks mode. The downloaded file opens in quirks mode, so its layout can differ slightly. Gemini output nearly always includes the doctype.
