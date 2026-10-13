@@ -20,8 +20,14 @@
   var KEYS = {
     code: STORAGE_PREFIX + 'code',
     prefs: STORAGE_PREFIX + 'prefs',
-    running: STORAGE_PREFIX + 'running:'   // + tab id; see "Freeze recovery"
+    running: STORAGE_PREFIX + 'running:',   // + tab id; see "Freeze recovery"
+    previewLs: STORAGE_PREFIX + 'preview-ls:' // + code fingerprint; see "Preview storage"
   };
+  var PREVIEW_STORAGE_MAX_KEYS = 200;
+  var PREVIEW_STORAGE_MAX_KEY_LEN = 500;
+  var PREVIEW_STORAGE_MAX_VALUE_LEN = 100000;
+  var PREVIEW_STORAGE_MAX_JSON = 2000000;
+  var PREVIEW_STORAGE_SAVE_DELAY = 300; // ms; batches creations that save many times a second
   var AUTO_RUN_DELAY = 900;       // ms of quiet typing before the preview restarts
   var SAVE_DELAY = 400;           // ms of quiet typing before autosaving
   var HEARTBEAT_INTERVAL = 1000;  // ms between "this tab is still alive" notes while a preview runs
@@ -198,22 +204,26 @@
   // It runs inside the sandbox, before the pasted code, and:
   //  - reports uncaught errors and failed script/stylesheet loads to this page
   //    (as plain data that we only ever display as text), and
-  //  - provides in-memory stand-ins for localStorage/sessionStorage, which a
-  //    sandboxed page cannot use, so creations that save scores still work.
+  //  - provides stand-ins for localStorage/sessionStorage, which a sandboxed
+  //    page cannot use; localStorage is copied to this page (see "Preview storage"),
+  //  - reports clicks on download links, which the sandbox blocks.
   // It is turned into a single line so the pasted code keeps its line numbers.
   // Keep it free of "//" comments and of the text "</script".
   // ---------------------------------------------------------------------------
 
-  function previewHelper(RUN) {
+  function previewHelper(RUN, SEED) {
     var target = window.parent;
     var sent = 0;
+    function post(detail) {
+      detail.htmlPlayground = 1;
+      detail.run = RUN;
+      try { target.postMessage(detail, '*'); } catch (e) { }
+    }
     function send(type, detail) {
       if (sent >= 60) { return; }
       sent += 1;
-      detail.htmlPlayground = 1;
       detail.type = type;
-      detail.run = RUN;
-      try { target.postMessage(detail, '*'); } catch (e) { }
+      post(detail);
     }
     function describe(value) {
       try {
@@ -244,13 +254,36 @@
     window.addEventListener('unhandledrejection', function (event) {
       send('error', { message: ('Unhandled promise rejection: ' + describe(event.reason)).slice(0, 500), line: 0, column: 0, inPage: false });
     });
-    function memoryStorage() {
+    function memoryStorage(syncLocal, useSeed) {
       var map = new Map();
+      if (useSeed && SEED && typeof SEED === 'object') {
+        try {
+          Object.keys(SEED).forEach(function (k) {
+            if (typeof SEED[k] === 'string') { map.set(String(k), SEED[k]); }
+          });
+        } catch (e) { }
+      }
+      var syncQueued = false;
+      function sync() {
+        if (!syncLocal || syncQueued) { return; }
+        syncQueued = true;
+        setTimeout(function () {
+          syncQueued = false;
+          var items = Object.create(null);
+          map.forEach(function (value, key) { items[key] = value; });
+          post({ type: 'preview-storage', items: items });
+        }, 0);
+      }
       var api = {
         getItem: function (key) { key = String(key); return map.has(key) ? map.get(key) : null; },
-        setItem: function (key, value) { map.set(String(key), String(value)); },
-        removeItem: function (key) { map.delete(String(key)); },
-        clear: function () { map.clear(); },
+        setItem: function (key, value) {
+          key = String(key);
+          value = String(value);
+          map.set(key, value);
+          sync();
+        },
+        removeItem: function (key) { key = String(key); map.delete(key); sync(); },
+        clear: function () { map.clear(); sync(); },
         key: function (index) { var all = Array.from(map.keys()); return index >= 0 && index < all.length ? all[index] : null; }
       };
       return new Proxy(api, {
@@ -260,11 +293,18 @@
           return map.has(prop) ? map.get(prop) : undefined;
         },
         set: function (obj, prop, value) {
-          if (typeof prop !== 'symbol') { map.set(prop, String(value)); }
+          if (typeof prop !== 'symbol') {
+            map.set(prop, String(value));
+            sync();
+          }
           return true;
         },
         has: function (obj, prop) { return map.has(prop) || prop in api; },
-        deleteProperty: function (obj, prop) { map.delete(prop); return true; },
+        deleteProperty: function (obj, prop) {
+          map.delete(prop);
+          sync();
+          return true;
+        },
         ownKeys: function () { return Array.from(map.keys()); },
         getOwnPropertyDescriptor: function (obj, prop) {
           if (map.has(prop)) { return { value: map.get(prop), writable: true, enumerable: true, configurable: true }; }
@@ -272,13 +312,33 @@
         }
       });
     }
-    ['localStorage', 'sessionStorage'].forEach(function (name) {
-      try { if (window[name]) { window[name].getItem('x'); return; } } catch (e) { }
-      try {
-        var stand = memoryStorage();
-        Object.defineProperty(window, name, { configurable: true, enumerable: true, get: function () { return stand; } });
-      } catch (e) { }
-    });
+    try {
+      var localStand = memoryStorage(true, true);
+      try { if (window.localStorage) { window.localStorage.getItem('x'); } else { throw new Error('need stand-in'); } } catch (e) {
+        Object.defineProperty(window, 'localStorage', { configurable: true, enumerable: true, get: function () { return localStand; } });
+      }
+    } catch (e) { }
+    try {
+      var sessionStand = memoryStorage(false, false);
+      try { if (window.sessionStorage) { window.sessionStorage.getItem('x'); } else { throw new Error('need stand-in'); } } catch (e) {
+        Object.defineProperty(window, 'sessionStorage', { configurable: true, enumerable: true, get: function () { return sessionStand; } });
+      }
+    } catch (e) { }
+    function downloadBlocked() { send('download-blocked', {}); }
+    document.addEventListener('click', function (event) {
+      var el = event.target;
+      if (!el || !el.closest) { return; }
+      var link = el.closest('a');
+      if (link && link.hasAttribute('download')) { downloadBlocked(); }
+    }, true);
+    try {
+      var anchorProto = HTMLAnchorElement.prototype;
+      var origClick = anchorProto.click;
+      anchorProto.click = function () {
+        if (this.hasAttribute && this.hasAttribute('download')) { downloadBlocked(); }
+        return origClick.apply(this, arguments);
+      };
+    } catch (e) { }
     var me = document.currentScript;
     if (me && me.parentNode) { me.parentNode.removeChild(me); }
   }
@@ -330,6 +390,8 @@
   var toastAction = $('toastAction');
   var confirmDialog = $('confirmDialog');
   var helpDialog = $('helpDialog');
+  var clearPreviewDataBtn = $('clearPreviewDataBtn');
+  var downloadBlockedBanner = $('downloadBlockedBanner');
 
   // ---------------------------------------------------------------------------
   // Storage (all access guarded: storage can be missing, blocked, or full)
@@ -381,6 +443,65 @@
     return !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
   }
 
+  // Fingerprint of the pasted code so preview localStorage can be restored per project.
+  function codeFingerprint(code) {
+    var h = 5381;
+    for (var i = 0; i < code.length; i++) {
+      h = ((h << 5) + h) ^ code.charCodeAt(i);
+    }
+    return (h >>> 0).toString(36);
+  }
+
+  function previewStorageKey(code) {
+    return KEYS.previewLs + codeFingerprint(code);
+  }
+
+  function sanitizePreviewStorage(raw) {
+    var out = Object.create(null);
+    if (!raw || typeof raw !== 'object') { return out; }
+    var keys = Object.keys(raw);
+    for (var i = 0; i < keys.length && i < PREVIEW_STORAGE_MAX_KEYS; i++) {
+      var k = keys[i];
+      if (typeof k !== 'string' || k.length > PREVIEW_STORAGE_MAX_KEY_LEN) { continue; }
+      var v = raw[k];
+      if (typeof v !== 'string' || v.length > PREVIEW_STORAGE_MAX_VALUE_LEN) { continue; }
+      out[k] = v;
+    }
+    return out;
+  }
+
+  function loadPreviewStorage(code) {
+    var raw = store.get(previewStorageKey(code));
+    if (!raw) { return Object.create(null); }
+    try {
+      return sanitizePreviewStorage(JSON.parse(raw));
+    } catch (e) {
+      return Object.create(null);
+    }
+  }
+
+  function savePreviewStorage(code, data) {
+    var clean = sanitizePreviewStorage(data);
+    var json = JSON.stringify(clean);
+    if (json.length > PREVIEW_STORAGE_MAX_JSON) { return false; }
+    if (!Object.keys(clean).length) {
+      store.remove(previewStorageKey(code));
+      return true;
+    }
+    return store.set(previewStorageKey(code), json).ok;
+  }
+
+  function flushPreviewStorage() {
+    clearTimeout(timers.previewStorage);
+    if (!state.previewStoragePending) { return; }
+    state.previewStoragePending = false;
+    savePreviewStorage(state.previewStorageCode, state.previewStorage);
+  }
+
+  function clearPreviewStorageForCode(code) {
+    store.remove(previewStorageKey(code));
+  }
+
   // ---------------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------------
@@ -404,7 +525,10 @@
     savePending: false,
     saveFailed: false,
     savePaused: false,      // another tab changed the saved code; wait for the person to choose
-    otherTabCode: null
+    otherTabCode: null,
+    previewStorage: Object.create(null),
+    previewStorageCode: '',
+    previewStoragePending: false
   };
   var timers = {};
   var isMac = /Mac|iPhone|iPad|iPod/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent);
@@ -736,8 +860,8 @@
 
   // Adds the helper script right after the doctype (or at the very start), on the
   // same line, so the line numbers of the pasted code are unchanged.
-  function buildPreviewDocument(code, runId) {
-    var helper = '<script>(' + HELPER_SOURCE + ')(' + JSON.stringify(runId) + ');<\/script>';
+  function buildPreviewDocument(code, runId, previewSeed) {
+    var helper = '<script>(' + HELPER_SOURCE + ')(' + JSON.stringify(runId) + ',' + JSON.stringify(previewSeed || null) + ');<\/script>';
     var at = doctypeEnd(code);
     if (at > 0) {
       return code.slice(0, at) + helper + code.slice(at);
@@ -824,10 +948,12 @@
     removeFrame();
 
     previewNotice.hidden = true;
+    if (downloadBlockedBanner) { downloadBlockedBanner.hidden = true; }
     if (!code.trim()) {
       state.runId = null;
       stopHeartbeat();
       previewEmpty.hidden = false;
+      updateClearPreviewDataButton();
       return;
     }
     previewEmpty.hidden = true;
@@ -842,13 +968,16 @@
     var runId = newRunId();
     state.runId = runId;
     state.lastRunLines = countLines(code);
+    flushPreviewStorage();
+    state.previewStorageCode = code;
+    state.previewStorage = loadPreviewStorage(code);
     startHeartbeat();
 
     var frame = document.createElement('iframe');
     frame.setAttribute('sandbox', SANDBOX);
     frame.setAttribute('allow', ALLOW);
     frame.setAttribute('title', 'Preview of your creation');
-    frame.srcdoc = buildPreviewDocument(code, runId);
+    frame.srcdoc = buildPreviewDocument(code, runId, state.previewStorage);
     frame.addEventListener('load', function () {
       if (state.runId !== runId) { return; }
       if (state.focusGuard && state.focusGuard.runId === runId) { state.focusGuard.until = Date.now() + 1500; }
@@ -860,6 +989,7 @@
 
     state.frame = frame;
     frameHost.appendChild(frame);
+    updateClearPreviewDataButton();
     flashRunStatus(options.manual ? 'Restarted' : 'Updated');
   }
 
@@ -984,11 +1114,53 @@
         line: 0,
         advice: 'This part comes from the internet. Check the connection, or ask Gemini to include it in the file.'
       };
+    } else if (data.type === 'preview-storage') {
+      // A full copy of the creation's localStorage, sent once per burst of writes.
+      if (editor.value !== state.previewStorageCode) { return; }
+      state.previewStorage = sanitizePreviewStorage(data.items);
+      state.previewStoragePending = true;
+      clearTimeout(timers.previewStorage);
+      timers.previewStorage = setTimeout(flushPreviewStorage, PREVIEW_STORAGE_SAVE_DELAY);
+      updateClearPreviewDataButton();
+    } else if (data.type === 'download-blocked') {
+      showDownloadBlockedNotice();
     } else {
       return;
     }
-    addProblem(problem);
+    if (problem) { addProblem(problem); }
   });
+
+  function showDownloadBlockedNotice() {
+    if (downloadBlockedBanner) {
+      downloadBlockedBanner.hidden = false;
+    }
+    toast('Downloads are turned off inside the preview. Use Download above to save your code, or open the downloaded file to use in-app save buttons.', { duration: 8000 });
+  }
+
+  function updateClearPreviewDataButton() {
+    if (!clearPreviewDataBtn) { return; }
+    var hasData = state.previewStorage && Object.keys(state.previewStorage).length > 0;
+    clearPreviewDataBtn.hidden = !hasData || !hasCode();
+    clearPreviewDataBtn.disabled = !hasData;
+  }
+
+  function clearPreviewSavedData() {
+    if (!hasCode()) { return; }
+    confirmAction({
+      title: 'Clear saved data in the preview?',
+      body: 'This removes anything your creation saved while previewing (like contacts or high scores). Your code in the editor is not changed. The downloaded file keeps its own saved data.',
+      confirmLabel: 'Clear preview data'
+    }).then(function (ok) {
+      if (!ok) { return; }
+      clearTimeout(timers.previewStorage);
+      state.previewStoragePending = false;
+      clearPreviewStorageForCode(editor.value);
+      state.previewStorage = Object.create(null);
+      updateClearPreviewDataButton();
+      run({ manual: true });
+      toast('Cleared saved data for this creation in the preview.');
+    });
+  }
 
   function addProblem(problem) {
     state.problemTotal += 1;
@@ -1156,9 +1328,31 @@
   // a whole new page pasted into the middle of the old one, and chat text around the code.
   // Returns true when it took care of the paste.
   function handleIncomingPaste(text, viaButton) {
+    if (viaButton) {
+      var currentAll = editor.value;
+      var cleaningAll = analyzeCode(text) === 'extra-text';
+      var finalAll = cleaningAll ? cleanUpCode(text) : text;
+      var hadAll = currentAll.trim() !== '' && currentAll !== finalAll;
+      var msgAll;
+      if (hadAll && cleaningAll) {
+        msgAll = "Replaced your old code with the new version (and removed Gemini's chat text).";
+      } else if (hadAll) {
+        msgAll = 'Replaced your old code with the new version.';
+      } else if (cleaningAll) {
+        msgAll = "Removed Gemini's chat text that was copied along with your code.";
+      } else if (!hadAll && currentAll.trim() === '') {
+        msgAll = 'Pasted your code.';
+      }
+      replaceCode(finalAll, {
+        undoMessage: msgAll,
+        undoValue: hadAll ? currentAll : text,
+        showPreview: true
+      });
+      return true;
+    }
     var current = editor.value;
     var selectedAll = editor.selectionStart === 0 && editor.selectionEnd === current.length;
-    var replacing = viaButton || (current.trim() !== '' && !selectedAll && findHtmlStart(text) >= 0);
+    var replacing = (current.trim() !== '' && !selectedAll && findHtmlStart(text) >= 0);
     var replacesEverything = replacing || selectedAll || current.trim() === '';
     var cleaning = replacesEverything && analyzeCode(text) === 'extra-text';
     if (!replacing && !cleaning) { return false; }
@@ -1218,13 +1412,26 @@
       pasteWithKeyboard();
       return;
     }
-    navigator.clipboard.readText().then(function (text) {
+    var readPromise;
+    try {
+      readPromise = navigator.clipboard.readText();
+    } catch (e) {
+      pasteWithKeyboard();
+      return;
+    }
+    if (!readPromise || typeof readPromise.then !== 'function') {
+      pasteWithKeyboard();
+      return;
+    }
+    readPromise.then(function (text) {
       if (!text || !text.trim()) {
         toast('Nothing has been copied yet. Copy the code from Gemini first.');
         return;
       }
       handleIncomingPaste(text, true);
-    }, pasteWithKeyboard);
+    }, function () {
+      pasteWithKeyboard();
+    });
   }
 
   function pasteWithKeyboard() {
@@ -1509,6 +1716,7 @@
   $('sampleBtn').addEventListener('click', loadSample);
   $('emptySampleBtn').addEventListener('click', loadSample);
   $('clearBtn').addEventListener('click', clearCode);
+  if (clearPreviewDataBtn) { clearPreviewDataBtn.addEventListener('click', clearPreviewSavedData); }
   $('helpBtn').addEventListener('click', function () { openHelp(); });
   $('copyPromptBtn').addEventListener('click', function () {
     copyText(PROMPT_TIP).then(function (ok) {
@@ -1537,6 +1745,7 @@
   // A normal reload or close is not a freeze, so do not open paused next time.
   window.addEventListener('pagehide', function () {
     if (state.savePending) { saveNow(); }
+    flushPreviewStorage();
     stopHeartbeat();
   });
   window.addEventListener('pageshow', function (event) {

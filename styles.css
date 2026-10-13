@@ -421,6 +421,12 @@ body.no-wrap .editor { white-space: pre; overflow-wrap: normal; }
 .hint-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .hint .btn-quiet { color: var(--warn-text); }
 
+.banner-info {
+  background: var(--info-bg, #e0f2fe);
+  color: var(--info-text, #0c4a6e);
+  border-bottom-color: var(--info-border, #7dd3fc);
+}
+
 /* ---------- Divider ---------- */
 
 .divider {
