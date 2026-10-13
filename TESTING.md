@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Automated:** 22 of 22 browser tests pass in Chromium 141 (Playwright 1.56, headless, Linux). Run them with `cd tests && npm install && npm test`.
+- **Automated:** 25 of 25 browser tests pass in Chromium (Playwright, headless, Linux). Run them with `cd tests && npm install && npx playwright install chromium && npm test`.
 - **Reviews:** three evaluation passes, each followed by fixes:
   1. my own visual and behavioral review,
   2. an independent usability walkthrough role-playing a first-time attendee who has never written HTML,
@@ -36,6 +36,9 @@ The suite starts a plain static file server for the repository, as GitHub Pages 
 | 9f | Pasting a new version | A complete page pasted into the middle of old code **replaces** it (with Undo) instead of mixing two documents. A small snippet still inserts at the cursor. | Pass |
 | 9d | Storage blocked | Shows "Not saved on this device". Everything else works. | Pass |
 | 9e | Paste button | Reads the clipboard, replaces the code, and offers Undo. | Pass |
+| 9g | Paste without clipboard permission | The Paste button shows a plain-language message to use Ctrl/⌘+V (or tap-and-hold on a phone). The editor stays unchanged. | Pass |
+| 9h | Preview `localStorage` | Data survives a full page reload and **Restart**, stays separate from the playground's own storage keys, and **Clear preview data** resets it. | Pass |
+| 9i | Blocked downloads | A programmatic in-preview download shows the banner and a toast pointing people to **Download**. | Pass |
 | 10 | Static hosting | Works from a plain static server **and** straight from disk (`file://`). No server logic is used. | Pass |
 
 Each new reliability test (7d, 7e and 7f) was also run against the code from before its fix, and each one failed there. They are real regression tests.

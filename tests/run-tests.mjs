@@ -815,6 +815,72 @@ await test('9d. Storage blocked: the playground still works and says it cannot s
   await context.close();
 });
 
+await test('9g. Paste button without clipboard permission explains Ctrl/Cmd+V', async () => {
+  const context = await browser.newContext({
+    viewport: { width: 1200, height: 800 }
+    // deliberate: no clipboard-read permission
+  });
+  const { page } = await openApp({ context });
+  await page.click('#emptyPasteBtn');
+  await page.waitForFunction(() => document.getElementById('toastText').textContent.length > 0);
+  const toast = await page.textContent('#toastText');
+  assert(/Ctrl|⌘|paste with the keyboard|Tap and hold/i.test(toast), 'fallback message: ' + toast);
+  assert(await page.inputValue('#editor') === '', 'editor unchanged when clipboard read is blocked');
+  await context.close();
+});
+
+await test('9h. Preview localStorage survives reload and Restart; cannot read playground keys', async () => {
+  const { context, page } = await openApp();
+  const doc = `<!DOCTYPE html><html><body>
+<p id="out">empty</p>
+<script>
+  var n = Number(localStorage.getItem('count') || '0') + 1;
+  localStorage.setItem('count', String(n));
+  document.getElementById('out').textContent = 'count=' + n;
+  document.body.dataset.parentProbe = String(localStorage.getItem('html-playground:v1:code'));
+<\/script></body></html>`;
+  await setCode(page, doc);
+  await wait(1300);
+  let frame = await previewFrame(page);
+  assert(await frame.textContent('#out') === 'count=1', 'first run sets count');
+  assert(await frame.evaluate(() => document.body.dataset.parentProbe) === 'null', 'no access to playground storage keys');
+
+  await page.reload();
+  await page.waitForFunction(() => {
+    const iframe = document.querySelector('#frameHost iframe');
+    return iframe && iframe.contentDocument && iframe.contentDocument.getElementById('out')?.textContent === 'count=2';
+  }, null, { timeout: 15000 });
+  frame = await previewFrame(page, 15000);
+
+  await page.click('#runBtn');
+  await page.waitForFunction(() => {
+    const iframe = document.querySelector('#frameHost iframe');
+    return iframe && iframe.contentDocument && iframe.contentDocument.getElementById('out')?.textContent === 'count=3';
+  }, null, { timeout: 15000 });
+  frame = await previewFrame(page, 15000);
+
+  await page.click('#clearPreviewDataBtn');
+  await page.click('#confirmOk');
+  await page.waitForFunction(() => {
+    const iframe = document.querySelector('#frameHost iframe');
+    return iframe && iframe.contentDocument && iframe.contentDocument.getElementById('out')?.textContent === 'count=1';
+  }, null, { timeout: 15000 });
+  frame = await previewFrame(page, 15000);
+  await context.close();
+});
+
+await test('9i. In-preview download attempt shows a notice', async () => {
+  const { context, page } = await openApp();
+  await setCode(page, `<!DOCTYPE html><body><a id="dl" download="x.txt" href="data:text/plain,hi">Save</a>
+<script>document.getElementById('dl').click();<\/script></body>`);
+  await wait(1300);
+  await previewFrame(page);
+  await page.waitForSelector('#downloadBlockedBanner:not([hidden])', { timeout: 3000 });
+  const toast = await page.textContent('#toastText');
+  assert(/Downloads are turned off|Download above/i.test(toast), 'toast explains downloads: ' + toast);
+  await context.close();
+});
+
 await test('9e. Paste button reads the clipboard; Undo restores the old code', async () => {
   const { context, page } = await openApp();
   await page.evaluate(() => navigator.clipboard.writeText('<!DOCTYPE html><h1 id="c">From clipboard</h1>'));
