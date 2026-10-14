@@ -10,8 +10,13 @@
 - Other features: a resizable split, full-screen preview, a sample project, word wrap, and a phone layout with tabs.
 - Plain-language help for common mistakes:
   - Gemini's chat text copied along with the code is removed automatically.
+  - Pasting Gemini's chat reply (not the Canvas code) gets a specific hint pointing you to Canvas code view.
+  - On iPhone and iPad, a short note near **Paste** explains the two-tap paste bubble.
   - React code, or answers that were cut off, get a ready-made request for Gemini.
   - JavaScript errors get a **Copy for Gemini** button.
+  - On phones, a successful paste switches to the **Preview** tab so you see your creation right away.
+  - In-preview save/download buttons show a bold banner (downloads are blocked in the sandbox); use **Download** at the top for your HTML file.
+  - **Clear preview data** lives on the **Preview** tab only.
   - Creations that freeze the page open paused on the next visit.
 
 For running a session, see the [facilitator guide](FACILITATOR.md). For what was tested and what wasn't, see [TESTING.md](TESTING.md).
