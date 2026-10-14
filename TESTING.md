@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Automated:** 25 of 25 browser tests pass in Chromium (Playwright, headless, Linux). Run them with `cd tests && npm install && npx playwright install chromium && npm test`.
+- **Automated:** 28 browser tests pass in Chromium (Playwright, headless, Linux). Run them with `cd tests && npm install && npx playwright install chromium && npm test`.
 - **Reviews:** three evaluation passes, each followed by fixes:
   1. my own visual and behavioral review,
   2. an independent usability walkthrough role-playing a first-time attendee who has never written HTML,
@@ -30,6 +30,7 @@ The suite starts a plain static file server for the repository, as GitHub Pages 
 | 8 | Long file (20,009 lines, ~1 MB) | Rendered in a few seconds. The line count is correct. An error on line 20,006 is reported with the right number, and **Show line** scrolls there. Typing stays responsive. | Pass |
 | 8b | 11 MB of code | Autosave fails gracefully: it shows "Too big to save here" and leaves no stale copy to be restored later. The preview still works. | Pass |
 | 8c | Narrow screens (320, 390, 768 px) | Tabs replace side-by-side panes. There's no horizontal page scroll. Pasting switches to the Preview tab automatically. | Pass |
+| 8d | Paste button on phone | At 390 px width, **Paste what I copied** switches to the Preview tab and runs the code. | Pass |
 | 9 | Clear / Sample / keyboard | Clear and Sample ask first. Cancel and Esc keep the code. **Cancel** is focused by default. **Download my code first** works from the dialog. **Undo** restores. The divider moves by arrow keys and mouse drag and remembers its position. Keyboard focus rings are visible. Ctrl+S explains saving. Wrap on/off, Full screen on/off, and Help (opens at a section, closes with Esc) all work. | Pass |
 | 9b | Focus grabbing | A creation that calls `.focus()` on start doesn't steal keystrokes from the editor. Without the guard this test fails (checked by disabling it). | Pass |
 | 9c | Paste helper | Gemini's chat text and ``` fences are removed automatically on paste, and Undo restores exactly what was pasted. React code gets a request to copy, and the preview explains it can't run. Cut-off answers and partial copies get hints. Normal documents get no hint. | Pass |
@@ -38,7 +39,9 @@ The suite starts a plain static file server for the repository, as GitHub Pages 
 | 9e | Paste button | Reads the clipboard, replaces the code, and offers Undo. | Pass |
 | 9g | Paste without clipboard permission | The Paste button shows a plain-language message to use Ctrl/⌘+V (or tap-and-hold on a phone). The editor stays unchanged. | Pass |
 | 9h | Preview `localStorage` | Data survives a full page reload and **Restart** (including a creation that saves 150 times per run), stays separate from the playground's own storage keys, and **Clear preview data** resets it. | Pass |
-| 9i | Blocked downloads | A programmatic in-preview download shows the banner and a toast pointing people to **Download**. | Pass |
+| 9i | Blocked downloads | A programmatic in-preview download shows a bold banner above the preview frame before the toast, plus a toast pointing people to **Download**. | Pass |
+| 9j | Gemini chat prose | Pasting chat prose (no HTML) shows the Canvas-specific hint; CSS-only paste keeps the generic non-HTML message. | Pass |
+| 9k | iOS paste hint | With an iPhone user agent, hints appear near **Paste** and in Help. | Pass |
 | 10 | Static hosting | Works from a plain static server **and** straight from disk (`file://`). No server logic is used. | Pass |
 
 Each new reliability test (7d, 7e and 7f) was also run against the code from before its fix, and each one failed there. They are real regression tests.

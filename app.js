@@ -532,7 +532,9 @@
   };
   var timers = {};
   var isMac = /Mac|iPhone|iPad|iPod/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent);
+  var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   var modKeyLabel = isMac ? '⌘' : 'Ctrl';
+  var GEMINI_CHAT_PASTE_HINT = 'Looks like you copied Gemini\'s chat reply. Open the code view in Canvas, then select all and copy.';
   var narrowMedia = window.matchMedia ? window.matchMedia(NARROW_QUERY) : { matches: false };
   var coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches;
 
@@ -1133,8 +1135,12 @@
   function showDownloadBlockedNotice() {
     if (downloadBlockedBanner) {
       downloadBlockedBanner.hidden = false;
+      downloadBlockedBanner.scrollIntoView({ block: 'nearest', behavior: 'instant' in window ? 'instant' : 'auto' });
     }
-    toast('Downloads are turned off inside the preview. Use Download above to save your code, or open the downloaded file to use in-app save buttons.', { duration: 8000 });
+    clearTimeout(timers.downloadNotice);
+    timers.downloadNotice = setTimeout(function () {
+      toast('Downloads are turned off inside the preview. Use Download above to save your code, or open the downloaded file to use in-app save buttons.', { duration: 8000 });
+    }, 400);
   }
 
   function updateClearPreviewDataButton() {
@@ -1264,6 +1270,21 @@
     return null;
   }
 
+  // Gemini's response Copy button often pastes prose, not the Canvas code (no tags at all).
+  function looksLikeGeminiChatProse(code) {
+    if (code.length > MAX_ANALYZE_LENGTH) { return false; }
+    var text = code.trim();
+    if (!text || findHtmlStart(text) >= 0) { return false; }
+    if (/<[a-z!][^<>]*>/i.test(text)) { return false; }
+    if (/```/.test(text) || /^#{1,6}\s/m.test(text) || /^\s*[-*]\s+\S/m.test(text)) { return true; }
+    if (/\*\*[^*]+\*\*/.test(text) || /^\s*\d+\.\s+\S/m.test(text)) { return true; }
+    if (text.indexOf('<') !== -1) { return false; }
+    var words = text.match(/\b[\w']+\b/g);
+    if (!words || words.length < 5) { return false; }
+    if (/[.!?]\s+[A-Z"'(]/.test(text) || /[.!?]["']?\s*$/.test(text)) { return true; }
+    return /(here'?s|i'?ve|let me|sure!|certainly|created|built|happy to)/i.test(text);
+  }
+
   function cleanUpCode(code) {
     var text = code.trim();
     var start = findHtmlStart(text);
@@ -1296,6 +1317,9 @@
       hintAction.textContent = 'Copy a request for Gemini';
     } else if (kind === 'partial') {
       hintText.textContent = "This looks like only part of the code. In Gemini, use the code box's copy button to copy all of it. It usually starts with <!DOCTYPE html>.";
+      hintAction.textContent = 'Show me how';
+    } else if (kind === 'not-html' && looksLikeGeminiChatProse(code)) {
+      hintText.textContent = GEMINI_CHAT_PASTE_HINT;
       hintAction.textContent = 'Show me how';
     } else {
       hintText.textContent = 'This does not look like a complete web page. Make sure you copy all of the code. It usually starts with <!DOCTYPE html>.';
@@ -1809,6 +1833,9 @@
     $('pasteKeys').textContent = modKeyLabel + ' + V';
     if (coarsePointer) {
       $('pasteKeys').parentElement.textContent = 'Tap and hold in this box, then choose Paste';
+    }
+    if (isIOS) {
+      document.querySelectorAll('.ios-paste-hint').forEach(function (el) { el.hidden = false; });
     }
     runBtn.title = 'Run the code (' + modKeyLabel + ' + Enter)';
 
