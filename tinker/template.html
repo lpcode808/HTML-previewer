@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tinker Panel</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5d6673; --line: #dde1e6;
+    --accent: #2563eb; --hl: #fff1c2; --hl-ink: #7a4b00; --bad: #b42318; --bad-bg: #fdecea;
+    --code-bg: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111418; --panel: #191d22; --ink: #e8eaed; --muted: #9aa3ad; --line: #2b3138;
+      --accent: #6aa0ff; --hl: #4a3a10; --hl-ink: #ffd98a; --bad: #ff8a80; --bad-bg: #3a1a18;
+      --code-bg: #0e1114;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 17px; margin: 0 auto 0 0; }
+  button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; height: calc(100vh - 55px); }
+  #knobs { overflow-y: auto; padding: 12px 16px 40px; border-right: 1px solid var(--line); }
+  #preview { width: 100%; height: 100%; border: 0; background: #fff; }
+  .knob { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 10px; }
+  .knob.changed { border-color: var(--accent); }
+  .knob label { font-weight: 600; display: block; margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row input[type=range] { flex: 1; }
+  .row input[type=number], .row input[type=text] { width: 100%; font: inherit; padding: 4px 6px;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+  .row input[type=number] { width: 84px; }
+  .row input[type=color] { width: 48px; height: 32px; border: 0; background: none; padding: 0; }
+  .codeline { margin-top: 8px; font: 12.5px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    background: var(--code-bg); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap;
+    word-break: break-all; }
+  .codeline .ln { color: var(--muted); user-select: none; }
+  .codeline mark { background: var(--hl); color: var(--hl-ink); border-radius: 3px; padding: 0 2px; }
+  .why { color: var(--muted); font-size: 13.5px; margin: 6px 0 0; }
+  .missing { background: var(--bad-bg); color: var(--bad); border-radius: 6px; padding: 6px 8px;
+    font-size: 13.5px; margin-top: 6px; }
+  .note { color: var(--muted); font-size: 13px; }
+  dialog { width: min(760px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel); color: var(--ink); }
+  dialog textarea { width: 100%; height: 160px; font: 12.5px ui-monospace, Menlo, monospace;
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
+  #changes { white-space: pre-wrap; font: 12.5px ui-monospace, Menlo, monospace; }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 46vh auto; height: auto; }
+    #preview { height: 46vh; order: -1; }
+    #knobs { border-right: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Tinker</h1>
+  <button id="editBtn">Paste my app</button>
+  <button id="resetBtn">Undo all</button>
+  <button id="changesBtn">What I changed</button>
+  <button id="downloadBtn" class="primary">Download my version</button>
+</header>
+<main>
+  <section id="knobs" aria-label="Knobs"></section>
+  <iframe id="preview" title="Your app" sandbox="allow-scripts allow-modals allow-forms"></iframe>
+</main>
+
+<dialog id="editDlg">
+  <h2 style="margin-top:0">Paste your app and its knobs</h2>
+  <p class="note">1. Your whole HTML file. 2. The answer the AI gave you for the Tinker prompt.</p>
+  <label>Your app (HTML)</label>
+  <textarea id="codeIn"></textarea>
+  <label>Knobs (the AI's answer)</label>
+  <textarea id="knobsIn"></textarea>
+  <p id="parseErr" class="missing" hidden></p>
+  <div class="row" style="justify-content:flex-end;margin-top:8px">
+    <button id="cancelBtn">Cancel</button><button id="loadBtn" class="primary">Load</button>
+  </div>
+</dialog>
+
+<dialog id="changesDlg">
+  <h2 style="margin-top:0">What I changed</h2>
+  <p class="note">Every change is one value on one line of your code. Copy this into your notebook,
+    or paste it to your AI with "make these changes for me".</p>
+  <div id="changes"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:8px">
+    <button id="copyBtn">Copy</button><button id="closeBtn" class="primary">Close</button>
+  </div>
+</dialog>
+
+<script>
+const EXAMPLE = /*EXAMPLE*/null;
+
+let original = '';      // her file, never modified
+let knobs = [];         // [{...spec, start, end, line, lineStart, lineEnd, current, ok, problem}]
+const $ = (id) => document.getElementById(id);
+
+function parseKnobs(text) {
+  // Free models wrap JSON in ``` fences or add a sentence; take the outermost {...}.
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  if (a < 0 || b < a) throw new Error("I couldn't find the knob list ({ ... }) in that answer.");
+  const data = JSON.parse(text.slice(a, b + 1));
+  if (!Array.isArray(data.knobs)) throw new Error('The answer has no "knobs" list.');
+  return data;
+}
+
+function locate(spec) {
+  const k = { ...spec, ok: false, problem: '' };
+  if (!spec.code || !spec.value) { k.problem = 'This knob is missing its code or value.'; return k; }
+  const first = original.indexOf(spec.code);
+  if (first < 0) { k.problem = "The AI quoted code that isn't in your file. It may have mis-copied it."; return k; }
+  if (original.indexOf(spec.code, first + 1) >= 0) { k.problem = 'That code appears more than once in your file, so I can’t tell which one to change.'; return k; }
+  const off = spec.code.indexOf(spec.value);
+  if (off < 0) { k.problem = 'The value to change isn’t inside the quoted code.'; return k; }
+  k.start = first + off; k.end = k.start + spec.value.length;
+  k.lineStart = original.lastIndexOf('\n', k.start) + 1;
+  const le = original.indexOf('\n', k.start); k.lineEnd = le < 0 ? original.length : le;
+  k.line = original.slice(0, k.start).split('\n').length;
+  k.current = spec.value; k.ok = true;
+  if (k.type === 'color' && !/^#[0-9a-fA-F]{6}$/.test(spec.value)) k.type = 'text';
+  return k;
+}
+
+function build() {
+  // Apply every value from the end of the file backwards so earlier offsets stay valid.
+  let out = original;
+  [...knobs].filter(k => k.ok).sort((x, y) => y.start - x.start)
+    .forEach(k => { out = out.slice(0, k.start) + k.current + out.slice(k.end); });
+  return out;
+}
+
+let timer = null;
+function refresh() {
+  clearTimeout(timer);
+  timer = setTimeout(() => { $('preview').srcdoc = build(); }, 180);
+  knobs.forEach((k, i) => { if (k.ok) renderLine(i); });
+}
+
+function decimals(n) { const s = String(n); return s.includes('.') ? s.split('.')[1].length : 0; }
+
+function renderLine(i) {
+  const k = knobs[i], el = document.querySelector(`[data-i="${i}"]`);
+  const before = original.slice(k.lineStart, k.start).replace(/^\s+/, '');
+  const after = original.slice(k.end, k.lineEnd);
+  const box = el.querySelector('.codeline');
+  box.textContent = '';
+  const ln = document.createElement('span'); ln.className = 'ln'; ln.textContent = `line ${k.line}  `;
+  const m = document.createElement('mark'); m.textContent = k.current;
+  box.append(ln, before, m, after);
+  el.classList.toggle('changed', k.current !== k.value);
+}
+
+function render() {
+  const wrap = $('knobs'); wrap.textContent = '';
+  const intro = document.createElement('p'); intro.className = 'note';
+  intro.textContent = 'Each knob changes one value in your real code. The yellow part is what you are editing.';
+  wrap.append(intro);
+  knobs.forEach((k, i) => {
+    const card = document.createElement('div'); card.className = 'knob'; card.dataset.i = i;
+    const lab = document.createElement('label'); lab.textContent = k.label || '(no label)';
+    card.append(lab);
+    if (!k.ok) {
+      const p = document.createElement('div'); p.className = 'missing'; p.textContent = k.problem;
+      card.append(p); wrap.append(card); return;
+    }
+    const row = document.createElement('div'); row.className = 'row';
+    const set = (v) => { k.current = String(v); refresh(); };
+    if (k.type === 'number') {
+      const d = Math.max(decimals(k.step ?? 1), decimals(k.value));
+      const num = Number(k.value);
+      const min = k.min ?? Math.min(0, num), max = k.max ?? (num ? num * 3 : 10);
+      const r = Object.assign(document.createElement('input'), { type: 'range', min, max, step: k.step ?? 'any', value: num });
+      const n = Object.assign(document.createElement('input'), { type: 'number', step: k.step ?? 'any', value: num });
+      r.setAttribute('aria-label', k.label);
+      r.oninput = () => { n.value = Number(r.value).toFixed(d); set(n.value); };
+      n.oninput = () => { if (n.value !== '') { r.value = n.value; set(n.value); } };
+      k.reset = () => { r.value = num; n.value = k.value; };
+      row.append(r, n);
+    } else if (k.type === 'color') {
+      const c = Object.assign(document.createElement('input'), { type: 'color', value: k.value.toLowerCase() });
+      const t = Object.assign(document.createElement('input'), { type: 'text', value: k.value });
+      c.setAttribute('aria-label', k.label);
+      c.oninput = () => { t.value = c.value; set(c.value); };
+      t.oninput = () => { if (/^#[0-9a-fA-F]{6}$/.test(t.value)) c.value = t.value; set(t.value); };
+      k.reset = () => { c.value = k.value.toLowerCase(); t.value = k.value; };
+      row.append(c, t);
+    } else {
+      const t = Object.assign(document.createElement('input'), { type: 'text', value: k.value });
+      t.setAttribute('aria-label', k.label);
+      t.oninput = () => set(t.value);
+      k.reset = () => { t.value = k.value; };
+      row.append(t);
+    }
+    const code = document.createElement('div'); code.className = 'codeline';
+    const why = document.createElement('p'); why.className = 'why'; why.textContent = k.why || '';
+    card.append(row, code, why); wrap.append(card);
+  });
+  const found = knobs.filter(k => k.ok).length;
+  if (found < knobs.length) {
+    const p = document.createElement('p'); p.className = 'note';
+    p.textContent = `${found} of ${knobs.length} knobs matched your code. Red ones were skipped, and your app still runs.`;
+    wrap.append(p);
+  }
+  refresh();
+}
+
+function load(code, knobText) {
+  const data = parseKnobs(knobText);
+  original = code;
+  knobs = data.knobs.map(locate);
+  // Two knobs editing the same characters would corrupt each other: keep the first.
+  const ok = knobs.filter(k => k.ok).sort((a, b) => a.start - b.start);
+  for (let i = 1; i < ok.length; i++) if (ok[i].start < ok[i - 1].end) {
+    ok[i].ok = false; ok[i].problem = 'This knob overlaps another knob, so it was skipped.';
+  }
+  $('title').textContent = 'Tinker: ' + (data.app || 'my app');
+  $('codeIn').value = code; $('knobsIn').value = knobText;
+  render();
+}
+
+function changesText() {
+  const ch = knobs.filter(k => k.ok && k.current !== k.value);
+  if (!ch.length) return 'Nothing changed yet.';
+  return ch.map(k => `• ${k.label} (line ${k.line}): ${k.value} → ${k.current}`).join('\n');
+}
+
+$('editBtn').onclick = () => { $('parseErr').hidden = true; $('editDlg').showModal(); };
+$('cancelBtn').onclick = () => $('editDlg').close();
+$('loadBtn').onclick = () => {
+  try { load($('codeIn').value, $('knobsIn').value); $('editDlg').close(); }
+  catch (e) { $('parseErr').textContent = e.message; $('parseErr').hidden = false; }
+};
+$('resetBtn').onclick = () => { knobs.forEach(k => { if (k.ok) { k.current = k.value; k.reset(); } }); refresh(); };
+$('changesBtn').onclick = () => { $('changes').textContent = changesText(); $('changesDlg').showModal(); };
+$('closeBtn').onclick = () => $('changesDlg').close();
+$('copyBtn').onclick = () => navigator.clipboard?.writeText(changesText());
+$('downloadBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([build()], { type: 'text/html' }));
+  a.download = 'my-tinkered-app.html'; a.click();
+};
+
+if (EXAMPLE) load(EXAMPLE.code, EXAMPLE.knobs); else $('editDlg').showModal();
+</script>
+</body>
+</html>

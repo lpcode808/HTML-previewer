@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tinker Panel</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5d6673; --line: #dde1e6;
+    --accent: #2563eb; --hl: #fff1c2; --hl-ink: #7a4b00; --bad: #b42318; --bad-bg: #fdecea;
+    --code-bg: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111418; --panel: #191d22; --ink: #e8eaed; --muted: #9aa3ad; --line: #2b3138;
+      --accent: #6aa0ff; --hl: #4a3a10; --hl-ink: #ffd98a; --bad: #ff8a80; --bad-bg: #3a1a18;
+      --code-bg: #0e1114;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 17px; margin: 0 auto 0 0; }
+  button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; height: calc(100vh - 55px); }
+  #knobs { overflow-y: auto; padding: 12px 16px 40px; border-right: 1px solid var(--line); }
+  #preview { width: 100%; height: 100%; border: 0; background: #fff; }
+  .knob { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 10px; }
+  .knob.changed { border-color: var(--accent); }
+  .knob label { font-weight: 600; display: block; margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row input[type=range] { flex: 1; }
+  .row input[type=number], .row input[type=text] { width: 100%; font: inherit; padding: 4px 6px;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+  .row input[type=number] { width: 84px; }
+  .row input[type=color] { width: 48px; height: 32px; border: 0; background: none; padding: 0; }
+  .codeline { margin-top: 8px; font: 12.5px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    background: var(--code-bg); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap;
+    word-break: break-all; }
+  .codeline .ln { color: var(--muted); user-select: none; }
+  .codeline mark { background: var(--hl); color: var(--hl-ink); border-radius: 3px; padding: 0 2px; }
+  .why { color: var(--muted); font-size: 13.5px; margin: 6px 0 0; }
+  .missing { background: var(--bad-bg); color: var(--bad); border-radius: 6px; padding: 6px 8px;
+    font-size: 13.5px; margin-top: 6px; }
+  .note { color: var(--muted); font-size: 13px; }
+  dialog { width: min(760px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel); color: var(--ink); }
+  dialog textarea { width: 100%; height: 160px; font: 12.5px ui-monospace, Menlo, monospace;
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
+  #changes { white-space: pre-wrap; font: 12.5px ui-monospace, Menlo, monospace; }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 46vh auto; height: auto; }
+    #preview { height: 46vh; order: -1; }
+    #knobs { border-right: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Tinker</h1>
+  <button id="editBtn">Paste my app</button>
+  <button id="resetBtn">Undo all</button>
+  <button id="changesBtn">What I changed</button>
+  <button id="downloadBtn" class="primary">Download my version</button>
+</header>
+<main>
+  <section id="knobs" aria-label="Knobs"></section>
+  <iframe id="preview" title="Your app" sandbox="allow-scripts allow-modals allow-forms"></iframe>
+</main>
+
+<dialog id="editDlg">
+  <h2 style="margin-top:0">Paste your app and its knobs</h2>
+  <p class="note">1. Your whole HTML file. 2. The answer the AI gave you for the Tinker prompt.</p>
+  <label>Your app (HTML)</label>
+  <textarea id="codeIn"></textarea>
+  <label>Knobs (the AI's answer)</label>
+  <textarea id="knobsIn"></textarea>
+  <p id="parseErr" class="missing" hidden></p>
+  <div class="row" style="justify-content:flex-end;margin-top:8px">
+    <button id="cancelBtn">Cancel</button><button id="loadBtn" class="primary">Load</button>
+  </div>
+</dialog>
+
+<dialog id="changesDlg">
+  <h2 style="margin-top:0">What I changed</h2>
+  <p class="note">Every change is one value on one line of your code. Copy this into your notebook,
+    or paste it to your AI with "make these changes for me".</p>
+  <div id="changes"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:8px">
+    <button id="copyBtn">Copy</button><button id="closeBtn" class="primary">Close</button>
+  </div>
+</dialog>
+
+<script>
+const EXAMPLE = {"code": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Football Field Stopwatch<\/title>\n    <!-- Tailwind CSS for UI controls -->\n    <script src=\"https://cdn.tailwindcss.com\"><\/script>\n    <!-- FontAwesome for Icons -->\n    <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\">\n    <!-- Inter Font -->\n    <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Graduate&display=swap\" rel=\"stylesheet\">\n    <style>\n        body {\n            font-family: 'Inter', sans-serif;\n            touch-action: manipulation;\n        }\n        .scoreboard-font {\n            font-family: 'Graduate', cursive, sans-serif;\n        }\n        /* Custom glow effects for LED theme */\n        .glow-green {\n            text-shadow: 0 0 10px rgba(74, 222, 128, 0.7);\n        }\n        .glow-yellow {\n            text-shadow: 0 0 10px rgba(250, 204, 21, 0.7);\n        }\n    <\/style>\n<\/head>\n<body class=\"bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between select-none overflow-x-hidden\">\n\n    <!-- Top Scoreboard Bar -->\n    <header class=\"w-full bg-slate-950 border-b border-slate-800 p-4 shadow-xl\">\n        <div class=\"max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4\">\n            <!-- Game Title / Info -->\n            <div class=\"flex items-center space-x-3\">\n                <div class=\"bg-amber-600 text-white p-2 rounded-lg shadow-md\">\n                    <i class=\"fa-solid font-bold text-2xl fa-football\"><\/i>\n                <\/div>\n                <div>\n                    <h1 class=\"text-xl font-extrabold tracking-wider text-amber-500 uppercase\">Gridiron Timer<\/h1>\n                    <p class=\"text-xs text-slate-400\">Classroom Edition Stopwatch<\/p>\n                <\/div>\n            <\/div>\n\n            <!-- Digital Time Display -->\n            <div class=\"bg-black/80 px-6 py-2 rounded-xl border-2 border-slate-700 flex items-center gap-6 shadow-inner\">\n                <div class=\"text-center\">\n                    <span class=\"text-xs text-slate-500 uppercase font-bold tracking-widest block\">Elapsed Time<\/span>\n                    <span id=\"digitalClock\" class=\"scoreboard-font text-3xl md:text-4xl text-green-400 font-bold glow-green tracking-wider\">00:00.00<\/span>\n                <\/div>\n                <div class=\"h-8 w-px bg-slate-800\"><\/div>\n                <div class=\"text-center\">\n                    <span class=\"text-xs text-slate-500 uppercase font-bold tracking-widest block\">Yardage<\/span>\n                    <span id=\"yardDisplay\" class=\"scoreboard-font text-2xl md:text-3xl text-yellow-400 font-bold glow-yellow\">0 YRD<\/span>\n                <\/div>\n            <\/div>\n\n            <!-- Goal Target Selector -->\n            <div class=\"flex items-center gap-2 bg-slate-900 p-2 rounded-lg border border-slate-800\">\n                <label for=\"targetSelect\" class=\"text-xs text-slate-400 font-semibold uppercase\">Goal Target:<\/label>\n                <select id=\"targetSelect\" class=\"bg-slate-800 text-amber-400 font-bold text-sm rounded px-2 py-1 border border-slate-700 focus:outline-none focus:border-amber-500\">\n                    <option value=\"10\">10 Seconds (Drive)<\/option>\n                    <option value=\"30\">30 Seconds (Half Drive)<\/option>\n                    <option value=\"60\" selected>60 Seconds (Full Field)<\/option>\n                    <option value=\"120\">2 Minutes (Drill)<\/option>\n                    <option value=\"300\">5 Minutes (Period)<\/option>\n                <\/select>\n            <\/div>\n        <\/div>\n    <\/header>\n\n    <!-- Main Field Canvas Area -->\n    <main class=\"flex-1 max-w-6xl w-full mx-auto p-2 sm:p-4 flex flex-col justify-center items-center\">\n        <!-- Canvas Container -->\n        <div class=\"w-full relative bg-slate-950 rounded-2xl p-2 sm:p-4 border-4 border-slate-800 shadow-2xl overflow-hidden\">\n            <canvas id=\"footballCanvas\" class=\"w-full h-auto rounded-xl shadow-inner cursor-pointer block\"><\/canvas>\n\n            <!-- Touch Overlay prompt for quick start/pause -->\n            <div id=\"touchPrompt\" class=\"absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-none\">\n                <span class=\"bg-slate-900/90 text-amber-400 px-4 py-2 rounded-full border border-amber-500/40 text-sm font-semibold shadow-lg\">\n                    Click Canvas to Play / Pause\n                <\/span>\n            <\/div>\n        <\/div>\n    <\/main>\n\n    <!-- Bottom Controls & Touch Buttons -->\n    <footer class=\"w-full bg-slate-950 border-t border-slate-800 p-4\">\n        <div class=\"max-w-4xl mx-auto flex flex-wrap justify-center items-center gap-4\">\n            <!-- Start / Pause Button -->\n            <button id=\"startPauseBtn\" class=\"flex-1 min-w-[140px] max-w-[200px] bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-lg\">\n                <i id=\"startPauseIcon\" class=\"fa-solid fa-play\"><\/i>\n                <span id=\"startPauseText\">START<\/span>\n            <\/button>\n\n            <!-- Lap / Yard Log Button -->\n            <button id=\"lapBtn\" class=\"flex-1 min-w-[120px] max-w-[160px] bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-base\">\n                <i class=\"fa-solid fa-flag\"><\/i>\n                <span>FIRST DOWN<\/span>\n            <\/button>\n\n            <!-- Reset Button -->\n            <button id=\"resetBtn\" class=\"flex-1 min-w-[120px] max-w-[160px] bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-base\">\n                <i class=\"fa-solid fa-rotate-left\"><\/i>\n                <span>RESET<\/span>\n            <\/button>\n        <\/div>\n\n        <!-- Lap History / Log Table -->\n        <div id=\"lapHistoryContainer\" class=\"max-w-2xl mx-auto mt-4 hidden\">\n            <h3 class=\"text-xs uppercase font-bold text-slate-400 mb-2 tracking-wider flex items-center gap-2\">\n                <i class=\"fa-solid fa-list-check text-amber-500\"><\/i> Down Marks / Laps\n            <\/h3>\n            <div class=\"bg-slate-900 border border-slate-800 rounded-xl max-h-32 overflow-y-auto p-2\">\n                <ul id=\"lapList\" class=\"space-y-1 text-xs\">\n                    <!-- Lap items added dynamically -->\n                <\/ul>\n            <\/div>\n        <\/div>\n    <\/footer>\n\n    <!-- JavaScript Application Logic -->\n    <script>\n        // State Management\n        let startTime = 0;\n        let elapsedTime = 0;\n        let timerInterval = null;\n        let isRunning = false;\n        let targetDurationSec = 60; // Default 60 seconds for full field\n        let laps = [];\n\n        // DOM Elements\n        const canvas = document.getElementById('footballCanvas');\n        const ctx = canvas.getContext('2d');\n        const digitalClock = document.getElementById('digitalClock');\n        const yardDisplay = document.getElementById('yardDisplay');\n        const startPauseBtn = document.getElementById('startPauseBtn');\n        const startPauseIcon = document.getElementById('startPauseIcon');\n        const startPauseText = document.getElementById('startPauseText');\n        const resetBtn = document.getElementById('resetBtn');\n        const lapBtn = document.getElementById('lapBtn');\n        const targetSelect = document.getElementById('targetSelect');\n        const lapHistoryContainer = document.getElementById('lapHistoryContainer');\n        const lapList = document.getElementById('lapList');\n\n        // Field Dimensions Configuration\n        const FIELD_ASPECT_RATIO = 2.1; // Width to Height ratio\n        let canvasWidth = 800;\n        let canvasHeight = 400;\n\n        // Visual Parameters\n        let ballX = 0;\n        let ballY = 0;\n        let targetX = 0;\n\n        // Initialize Canvas Size dynamically\n        function resizeCanvas() {\n            const container = canvas.parentElement;\n            canvasWidth = container.clientWidth - 32; // Account for padding\n            canvasHeight = Math.max(220, Math.min(canvasWidth / FIELD_ASPECT_RATIO, 420));\n\n            // Handle high DPI displays\n            const dpr = window.devicePixelRatio || 1;\n            canvas.width = canvasWidth * dpr;\n            canvas.height = canvasHeight * dpr;\n\n            ctx.scale(dpr, dpr);\n            drawField();\n        }\n\n        // Timer Controls\n        function startTimer() {\n            if (!isRunning) {\n                isRunning = true;\n                startTime = Date.now() - elapsedTime;\n                timerInterval = requestAnimationFrame(updateLoop);\n\n                // UI Updates\n                startPauseBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');\n                startPauseBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');\n                startPauseIcon.className = 'fa-solid fa-pause';\n                startPauseText.textContent = 'PAUSE';\n            }\n        }\n\n        function pauseTimer() {\n            if (isRunning) {\n                isRunning = false;\n                cancelAnimationFrame(timerInterval);\n\n                // UI Updates\n                startPauseBtn.classList.remove('bg-amber-600', 'hover:bg-amber-500');\n                startPauseBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');\n                startPauseIcon.className = 'fa-solid fa-play';\n                startPauseText.textContent = 'START';\n            }\n        }\n\n        function resetTimer() {\n            pauseTimer();\n            elapsedTime = 0;\n            laps = [];\n            updateDisplay(0);\n            renderLapList();\n            drawField();\n        }\n\n        function toggleTimer() {\n            if (isRunning) {\n                pauseTimer();\n            } else {\n                startTimer();\n            }\n        }\n\n        function recordLap() {\n            if (elapsedTime === 0) return;\n\n            const yard = calculateYards(elapsedTime);\n            const timeStr = formatTime(elapsedTime);\n            laps.unshift({ id: laps.length + 1, time: timeStr, yard: yard });\n            renderLapList();\n        }\n\n        // Render Lap List UI\n        function renderLapList() {\n            if (laps.length === 0) {\n                lapHistoryContainer.classList.add('hidden');\n                lapList.innerHTML = '';\n                return;\n            }\n\n            lapHistoryContainer.classList.remove('hidden');\n            lapList.innerHTML = laps.map(lap => `\n                <li class=\"flex justify-between items-center bg-slate-800/60 px-3 py-1.5 rounded border border-slate-700/50\">\n                    <span class=\"font-bold text-amber-400\">Down ${lap.id}<\/span>\n                    <span class=\"text-slate-300 font-mono\">${lap.time}<\/span>\n                    <span class=\"text-yellow-400 font-bold\">${lap.yard} YRD Line<\/span>\n                <\/li>\n            `).join('');\n        }\n\n        // Core Update Loop\n        function updateLoop() {\n            if (!isRunning) return;\n\n            elapsedTime = Date.now() - startTime;\n            updateDisplay(elapsedTime);\n            drawField();\n\n            timerInterval = requestAnimationFrame(updateLoop);\n        }\n\n        // Format time in MM:SS.MS\n        function formatTime(ms) {\n            const minutes = Math.floor(ms / 60000);\n            const seconds = Math.floor((ms % 60000) / 1000);\n            const hundredths = Math.floor((ms % 1000) / 10);\n\n            const pad = (num) => num.toString().padStart(2, '0');\n            return `${pad(minutes)}:${pad(seconds)}.${pad(hundredths)}`;\n        }\n\n        // Calculate yard line based on elapsed time progress\n        function calculateYards(ms) {\n            const totalSeconds = ms / 1000;\n            const progress = Math.min(totalSeconds / targetDurationSec, 1.0);\n            // 0 to 100 yards\n            return Math.floor(progress * 100);\n        }\n\n        // Update Text Display Elements\n        function updateDisplay(ms) {\n            digitalClock.textContent = formatTime(ms);\n            const yards = calculateYards(ms);\n            yardDisplay.textContent = `${yards} YRD`;\n        }\n\n        // Drawing Functions (HTML5 Canvas Engine)\n        function drawField() {\n            // Clear canvas\n            ctx.clearRect(0, 0, canvasWidth, canvasHeight);\n\n            const endzoneWidth = canvasWidth * 0.08;\n            const fieldWidth = canvasWidth - (endzoneWidth * 2);\n            const fieldHeight = canvasHeight;\n\n            // 1. Draw Field Turf Grass Stripes\n            const stripeCount = 10;\n            const stripeWidth = fieldWidth / stripeCount;\n\n            for (let i = 0; i < stripeCount; i++) {\n                ctx.fillStyle = (i % 2 === 0) ? '#15803d' : '#166534'; // Alternating green shades\n                ctx.fillRect(endzoneWidth + (i * stripeWidth), 0, stripeWidth, fieldHeight);\n            }\n\n            // 2. Draw Endzones\n            // Left Endzone (HOME)\n            ctx.fillStyle = '#b91c1c'; // Dark Red\n            ctx.fillRect(0, 0, endzoneWidth, fieldHeight);\n\n            // Right Endzone (AWAY)\n            ctx.fillStyle = '#1e40af'; // Dark Blue\n            ctx.fillRect(canvasWidth - endzoneWidth, 0, endzoneWidth, fieldHeight);\n\n            // Endzone Text\n            ctx.save();\n            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';\n            ctx.font = `900 ${Math.max(12, endzoneWidth * 0.35)}px Inter, sans-serif`;\n            ctx.textAlign = 'center';\n            ctx.textBaseline = 'middle';\n\n            // Left Endzone Text\n            ctx.translate(endzoneWidth / 2, fieldHeight / 2);\n            ctx.rotate(-Math.PI / 2);\n            ctx.fillText('START', 0, 0);\n            ctx.restore();\n\n            // Right Endzone Text\n            ctx.save();\n            ctx.translate(canvasWidth - (endzoneWidth / 2), fieldHeight / 2);\n            ctx.rotate(Math.PI / 2);\n            ctx.fillText('GOAL', 0, 0);\n            ctx.restore();\n\n            // 3. Draw Boundary Lines\n            ctx.strokeStyle = '#ffffff';\n            ctx.lineWidth = 3;\n            ctx.strokeRect(endzoneWidth, 0, fieldWidth, fieldHeight);\n\n            // 4. Draw Yard Lines and Numbers\n            const yardIntervals = 10; // Every 10 yards\n            const step = fieldWidth / yardIntervals;\n\n            for (let i = 0; i <= yardIntervals; i++) {\n                const x = endzoneWidth + (i * step);\n\n                // Main Yard Line\n                ctx.beginPath();\n                ctx.moveTo(x, 0);\n                ctx.lineTo(x, fieldHeight);\n                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';\n                ctx.lineWidth = (i === 5) ? 3 : 1.5; // Thicker 50 yard line\n                ctx.stroke();\n\n                // Draw Hash marks between lines\n                if (i < yardIntervals) {\n                    const subStep = step / 5;\n                    for (let j = 1; j < 5; j++) {\n                        const hashX = x + (j * subStep);\n                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';\n                        ctx.lineWidth = 1;\n\n                        // Top hashes\n                        ctx.beginPath();\n                        ctx.moveTo(hashX, fieldHeight * 0.2);\n                        ctx.lineTo(hashX, fieldHeight * 0.23);\n                        ctx.stroke();\n\n                        // Bottom hashes\n                        ctx.beginPath();\n                        ctx.moveTo(hashX, fieldHeight * 0.8);\n                        ctx.lineTo(hashX, fieldHeight * 0.77);\n                        ctx.stroke();\n                    }\n                }\n\n                // Numbers (10, 20, 30, 40, 50, 40, 30, 20, 10)\n                if (i > 0 && i < yardIntervals) {\n                    const yardNum = (i <= 5) ? i * 10 : (10 - i) * 10;\n                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';\n                    ctx.font = `bold ${Math.max(10, canvasHeight * 0.05)}px Graduate, sans-serif`;\n                    ctx.textAlign = 'center';\n\n                    // Top Numbers\n                    ctx.fillText(yardNum.toString(), x, fieldHeight * 0.15);\n                    // Bottom Numbers\n                    ctx.fillText(yardNum.toString(), x, fieldHeight * 0.88);\n                }\n            }\n\n            // 5. Draw Goal Posts (Yellow)\n            drawGoalPost(endzoneWidth * 0.4, fieldHeight / 2);\n            drawGoalPost(canvasWidth - (endzoneWidth * 0.4), fieldHeight / 2, true);\n\n            // 6. Calculate Football Position\n            const totalSeconds = elapsedTime / 1000;\n            let progress = totalSeconds / targetDurationSec;\n\n            // Cap visual progress at 100% (or touchdown zone)\n            if (progress > 1.0) progress = 1.0;\n\n            const currentX = endzoneWidth + (progress * fieldWidth);\n            const currentY = fieldHeight / 2;\n\n            // Draw Yard/First Down markers logged\n            laps.forEach((lap, idx) => {\n                const lapYardPercent = Math.min(100, (lap.yard / 100));\n                const lapX = endzoneWidth + (lapYardPercent * fieldWidth);\n\n                ctx.fillStyle = '#f59e0b'; // Yellow marker line\n                ctx.fillRect(lapX - 1, 0, 3, fieldHeight);\n            });\n\n            // 7. Draw Football Asset at Current Progress\n            drawFootball(currentX, currentY);\n        }\n\n        // Draw Field Goal Post\n        function drawGoalPost(x, y, isRight = false) {\n            ctx.save();\n            ctx.strokeStyle = '#facc15'; // Bright yellow\n            ctx.lineWidth = 4;\n            ctx.lineCap = 'round';\n\n            const postHeight = canvasHeight * 0.3;\n\n            // Base pole\n            ctx.beginPath();\n            ctx.moveTo(x, y - (postHeight / 2));\n            ctx.lineTo(x, y + (postHeight / 2));\n            ctx.stroke();\n\n            // Crossbar\n            ctx.beginPath();\n            const arm = isRight ? -15 : 15;\n            ctx.moveTo(x, y);\n            ctx.lineTo(x + arm, y);\n            ctx.stroke();\n\n            ctx.restore();\n        }\n\n        // Draw realistic Football SVG/Path on Canvas\n        function drawFootball(x, y) {\n            ctx.save();\n            ctx.translate(x, y);\n\n            // Add slight bobbing / rotation movement if running\n            if (isRunning) {\n                const bounce = Math.sin(Date.now() / 150) * 4;\n                ctx.translate(0, bounce);\n            }\n\n            const ballWidth = Math.max(24, canvasWidth * 0.045);\n            const ballHeight = ballWidth * 0.6;\n\n            // Ball Shadow\n            ctx.beginPath();\n            ctx.ellipse(0, ballHeight * 0.8, ballWidth * 0.5, ballHeight * 0.3, 0, 0, Math.PI * 2);\n            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';\n            ctx.fill();\n\n            // Main Ball Body (Leather Brown)\n            ctx.beginPath();\n            ctx.ellipse(0, 0, ballWidth * 0.5, ballHeight * 0.5, 0, 0, Math.PI * 2);\n            ctx.fillStyle = '#78350f'; // Rich leather brown\n            ctx.fill();\n            ctx.strokeStyle = '#451a03';\n            ctx.lineWidth = 2;\n            ctx.stroke();\n\n            // White Stripes on Ends\n            ctx.strokeStyle = '#ffffff';\n            ctx.lineWidth = 2.5;\n\n            // Left Stripe\n            ctx.beginPath();\n            ctx.arc(-ballWidth * 0.25, 0, ballHeight * 0.35, -Math.PI / 3, Math.PI / 3);\n            ctx.stroke();\n\n            // Right Stripe\n            ctx.beginPath();\n            ctx.arc(ballWidth * 0.25, 0, ballHeight * 0.35, (2 * Math.PI) / 3, (4 * Math.PI) / 3);\n            ctx.stroke();\n\n            // Laces (White)\n            ctx.strokeStyle = '#ffffff';\n            ctx.lineWidth = 2;\n            // Main horizontal lace line\n            ctx.beginPath();\n            ctx.moveTo(-ballWidth * 0.2, 0);\n            ctx.lineTo(ballWidth * 0.2, 0);\n            ctx.stroke();\n\n            // Vertical cross stitches\n            const stitches = 4;\n            const stitchStep = (ballWidth * 0.35) / stitches;\n            for (let i = 0; i <= stitches; i++) {\n                const stitchX = (-ballWidth * 0.175) + (i * stitchStep);\n                ctx.beginPath();\n                ctx.moveTo(stitchX, -ballHeight * 0.15);\n                ctx.lineTo(stitchX, ballHeight * 0.15);\n                ctx.stroke();\n            }\n\n            ctx.restore();\n        }\n\n        // Event Listeners\n        startPauseBtn.addEventListener('click', toggleTimer);\n        resetBtn.addEventListener('click', resetTimer);\n        lapBtn.addEventListener('click', recordLap);\n\n        // Click on Canvas to Toggle Start/Pause\n        canvas.addEventListener('click', toggleTimer);\n\n        // Target Duration Select Handler\n        targetSelect.addEventListener('change', (e) => {\n            targetDurationSec = parseInt(e.target.value, 10);\n            drawField();\n        });\n\n        // Responsive handling\n        window.addEventListener('resize', resizeCanvas);\n\n        // Keyboard Shortcuts for Classroom Laptop usability\n        window.addEventListener('keydown', (e) => {\n            if (e.code === 'Space') {\n                e.preventDefault(); // Prevent scrolling page\n                toggleTimer();\n            } else if (e.code === 'KeyR') {\n                resetTimer();\n            } else if (e.code === 'KeyL' || e.code === 'Enter') {\n                recordLap();\n            }\n        });\n\n        // Initial Setup on Load\n        window.onload = function() {\n            resizeCanvas();\n            resetTimer();\n        };\n    <\/script>\n<\/body>\n<\/html>\n", "knobs": "{\n  \"app\": \"Gridiron Timer\",\n  \"knobs\": [\n    { \"label\": \"Home end zone color\", \"code\": \"ctx.fillStyle = '#b91c1c'; // Dark Red\", \"value\": \"#b91c1c\", \"type\": \"color\",\n      \"why\": \"Paints the left end zone, where the football starts. The words on top stay white.\" },\n    { \"label\": \"Away end zone color\", \"code\": \"ctx.fillStyle = '#1e40af'; // Dark Blue\", \"value\": \"#1e40af\", \"type\": \"color\",\n      \"why\": \"Paints the right end zone, the GOAL the football is running toward.\" },\n    { \"label\": \"Words in the goal\", \"code\": \"ctx.fillText('GOAL', 0, 0)\", \"value\": \"GOAL\", \"type\": \"text\",\n      \"why\": \"The word written sideways in the right end zone. Long words run off the edge, because the end zone does not grow.\" },\n    { \"label\": \"Football size\", \"code\": \"Math.max(24, canvasWidth * 0.045)\", \"value\": \"0.045\", \"type\": \"number\", \"min\": 0.02, \"max\": 0.15, \"step\": 0.005,\n      \"why\": \"How wide the ball is compared to the field. The 24 next to it means it never gets smaller than 24 pixels.\" },\n    { \"label\": \"How high the ball bounces\", \"code\": \"/ 150) * 4;\", \"value\": \"4\", \"type\": \"number\", \"min\": 0, \"max\": 40, \"step\": 1,\n      \"why\": \"How far the ball bobs up and down. You only see it while the timer is running, so press START.\" },\n    { \"label\": \"Bounce speed\", \"code\": \"Math.sin(Date.now() / 150)\", \"value\": \"150\", \"type\": \"number\", \"min\": 20, \"max\": 600, \"step\": 10,\n      \"why\": \"A bigger number makes the bounce slower. It is dividing the clock, so bigger means each bounce takes longer.\" },\n    { \"label\": \"End zone width\", \"code\": \"canvasWidth * 0.08;\", \"value\": \"0.08\", \"type\": \"number\", \"min\": 0.02, \"max\": 0.25, \"step\": 0.01,\n      \"why\": \"How much of the field each end zone takes up. The playing field shrinks to make room.\" },\n    { \"label\": \"Number of grass stripes\", \"code\": \"const stripeCount = 10;\", \"value\": \"10\", \"type\": \"number\", \"min\": 1, \"max\": 40, \"step\": 1,\n      \"why\": \"How many light and dark green stripes. Surprise: the yard lines do not move, because a different loop draws them.\" }\n  ]\n}\n"};
+
+let original = '';      // her file, never modified
+let knobs = [];         // [{...spec, start, end, line, lineStart, lineEnd, current, ok, problem}]
+const $ = (id) => document.getElementById(id);
+
+function parseKnobs(text) {
+  // Free models wrap JSON in ``` fences or add a sentence; take the outermost {...}.
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  if (a < 0 || b < a) throw new Error("I couldn't find the knob list ({ ... }) in that answer.");
+  const data = JSON.parse(text.slice(a, b + 1));
+  if (!Array.isArray(data.knobs)) throw new Error('The answer has no "knobs" list.');
+  return data;
+}
+
+function locate(spec) {
+  const k = { ...spec, ok: false, problem: '' };
+  if (!spec.code || !spec.value) { k.problem = 'This knob is missing its code or value.'; return k; }
+  const first = original.indexOf(spec.code);
+  if (first < 0) { k.problem = "The AI quoted code that isn't in your file. It may have mis-copied it."; return k; }
+  if (original.indexOf(spec.code, first + 1) >= 0) { k.problem = 'That code appears more than once in your file, so I can’t tell which one to change.'; return k; }
+  const off = spec.code.indexOf(spec.value);
+  if (off < 0) { k.problem = 'The value to change isn’t inside the quoted code.'; return k; }
+  k.start = first + off; k.end = k.start + spec.value.length;
+  k.lineStart = original.lastIndexOf('\n', k.start) + 1;
+  const le = original.indexOf('\n', k.start); k.lineEnd = le < 0 ? original.length : le;
+  k.line = original.slice(0, k.start).split('\n').length;
+  k.current = spec.value; k.ok = true;
+  if (k.type === 'color' && !/^#[0-9a-fA-F]{6}$/.test(spec.value)) k.type = 'text';
+  return k;
+}
+
+function build() {
+  // Apply every value from the end of the file backwards so earlier offsets stay valid.
+  let out = original;
+  [...knobs].filter(k => k.ok).sort((x, y) => y.start - x.start)
+    .forEach(k => { out = out.slice(0, k.start) + k.current + out.slice(k.end); });
+  return out;
+}
+
+let timer = null;
+function refresh() {
+  clearTimeout(timer);
+  timer = setTimeout(() => { $('preview').srcdoc = build(); }, 180);
+  knobs.forEach((k, i) => { if (k.ok) renderLine(i); });
+}
+
+function decimals(n) { const s = String(n); return s.includes('.') ? s.split('.')[1].length : 0; }
+
+function renderLine(i) {
+  const k = knobs[i], el = document.querySelector(`[data-i="${i}"]`);
+  const before = original.slice(k.lineStart, k.start).replace(/^\s+/, '');
+  const after = original.slice(k.end, k.lineEnd);
+  const box = el.querySelector('.codeline');
+  box.textContent = '';
+  const ln = document.createElement('span'); ln.className = 'ln'; ln.textContent = `line ${k.line}  `;
+  const m = document.createElement('mark'); m.textContent = k.current;
+  box.append(ln, before, m, after);
+  el.classList.toggle('changed', k.current !== k.value);
+}
+
+function render() {
+  const wrap = $('knobs'); wrap.textContent = '';
+  const intro = document.createElement('p'); intro.className = 'note';
+  intro.textContent = 'Each knob changes one value in your real code. The yellow part is what you are editing.';
+  wrap.append(intro);
+  knobs.forEach((k, i) => {
+    const card = document.createElement('div'); card.className = 'knob'; card.dataset.i = i;
+    const lab = document.createElement('label'); lab.textContent = k.label || '(no label)';
+    card.append(lab);
+    if (!k.ok) {
+      const p = document.createElement('div'); p.className = 'missing'; p.textContent = k.problem;
+      card.append(p); wrap.append(card); return;
+    }
+    const row = document.createElement('div'); row.className = 'row';
+    const set = (v) => { k.current = String(v); refresh(); };
+    if (k.type === 'number') {
+      const d = Math.max(decimals(k.step ?? 1), decimals(k.value));
+      const num = Number(k.value);
+      const min = k.min ?? Math.min(0, num), max = k.max ?? (num ? num * 3 : 10);
+      const r = Object.assign(document.createElement('input'), { type: 'range', min, max, step: k.step ?? 'any', value: num });
+      const n = Object.assign(document.createElement('input'), { type: 'number', step: k.step ?? 'any', value: num });
+      r.setAttribute('aria-label', k.label);
+      r.oninput = () => { n.value = Number(r.value).toFixed(d); set(n.value); };
+      n.oninput = () => { if (n.value !== '') { r.value = n.value; set(n.value); } };
+      k.reset = () => { r.value = num; n.value = k.value; };
+      row.append(r, n);
+    } else if (k.type === 'color') {
+      const c = Object.assign(document.createElement('input'), { type: 'color', value: k.value.toLowerCase() });
+      const t = Object.assign(document.createElement('input'), { type: 'text', value: k.value });
+      c.setAttribute('aria-label', k.label);
+      c.oninput = () => { t.value = c.value; set(c.value); };
+      t.oninput = () => { if (/^#[0-9a-fA-F]{6}$/.test(t.value)) c.value = t.value; set(t.value); };
+      k.reset = () => { c.value = k.value.toLowerCase(); t.value = k.value; };
+      row.append(c, t);
+    } else {
+      const t = Object.assign(document.createElement('input'), { type: 'text', value: k.value });
+      t.setAttribute('aria-label', k.label);
+      t.oninput = () => set(t.value);
+      k.reset = () => { t.value = k.value; };
+      row.append(t);
+    }
+    const code = document.createElement('div'); code.className = 'codeline';
+    const why = document.createElement('p'); why.className = 'why'; why.textContent = k.why || '';
+    card.append(row, code, why); wrap.append(card);
+  });
+  const found = knobs.filter(k => k.ok).length;
+  if (found < knobs.length) {
+    const p = document.createElement('p'); p.className = 'note';
+    p.textContent = `${found} of ${knobs.length} knobs matched your code. Red ones were skipped, and your app still runs.`;
+    wrap.append(p);
+  }
+  refresh();
+}
+
+function load(code, knobText) {
+  const data = parseKnobs(knobText);
+  original = code;
+  knobs = data.knobs.map(locate);
+  // Two knobs editing the same characters would corrupt each other: keep the first.
+  const ok = knobs.filter(k => k.ok).sort((a, b) => a.start - b.start);
+  for (let i = 1; i < ok.length; i++) if (ok[i].start < ok[i - 1].end) {
+    ok[i].ok = false; ok[i].problem = 'This knob overlaps another knob, so it was skipped.';
+  }
+  $('title').textContent = 'Tinker: ' + (data.app || 'my app');
+  $('codeIn').value = code; $('knobsIn').value = knobText;
+  render();
+}
+
+function changesText() {
+  const ch = knobs.filter(k => k.ok && k.current !== k.value);
+  if (!ch.length) return 'Nothing changed yet.';
+  return ch.map(k => `• ${k.label} (line ${k.line}): ${k.value} → ${k.current}`).join('\n');
+}
+
+$('editBtn').onclick = () => { $('parseErr').hidden = true; $('editDlg').showModal(); };
+$('cancelBtn').onclick = () => $('editDlg').close();
+$('loadBtn').onclick = () => {
+  try { load($('codeIn').value, $('knobsIn').value); $('editDlg').close(); }
+  catch (e) { $('parseErr').textContent = e.message; $('parseErr').hidden = false; }
+};
+$('resetBtn').onclick = () => { knobs.forEach(k => { if (k.ok) { k.current = k.value; k.reset(); } }); refresh(); };
+$('changesBtn').onclick = () => { $('changes').textContent = changesText(); $('changesDlg').showModal(); };
+$('closeBtn').onclick = () => $('changesDlg').close();
+$('copyBtn').onclick = () => navigator.clipboard?.writeText(changesText());
+$('downloadBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([build()], { type: 'text/html' }));
+  a.download = 'my-tinkered-app.html'; a.click();
+};
+
+if (EXAMPLE) load(EXAMPLE.code, EXAMPLE.knobs); else $('editDlg').showModal();
+</script>
+</body>
+</html>

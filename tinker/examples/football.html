@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Field Stopwatch</title>
+    <!-- Tailwind CSS for UI controls -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Graduate&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: manipulation;
+        }
+        .scoreboard-font {
+            font-family: 'Graduate', cursive, sans-serif;
+        }
+        /* Custom glow effects for LED theme */
+        .glow-green {
+            text-shadow: 0 0 10px rgba(74, 222, 128, 0.7);
+        }
+        .glow-yellow {
+            text-shadow: 0 0 10px rgba(250, 204, 21, 0.7);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between select-none overflow-x-hidden">
+
+    <!-- Top Scoreboard Bar -->
+    <header class="w-full bg-slate-950 border-b border-slate-800 p-4 shadow-xl">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <!-- Game Title / Info -->
+            <div class="flex items-center space-x-3">
+                <div class="bg-amber-600 text-white p-2 rounded-lg shadow-md">
+                    <i class="fa-solid font-bold text-2xl fa-football"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-wider text-amber-500 uppercase">Gridiron Timer</h1>
+                    <p class="text-xs text-slate-400">Classroom Edition Stopwatch</p>
+                </div>
+            </div>
+
+            <!-- Digital Time Display -->
+            <div class="bg-black/80 px-6 py-2 rounded-xl border-2 border-slate-700 flex items-center gap-6 shadow-inner">
+                <div class="text-center">
+                    <span class="text-xs text-slate-500 uppercase font-bold tracking-widest block">Elapsed Time</span>
+                    <span id="digitalClock" class="scoreboard-font text-3xl md:text-4xl text-green-400 font-bold glow-green tracking-wider">00:00.00</span>
+                </div>
+                <div class="h-8 w-px bg-slate-800"></div>
+                <div class="text-center">
+                    <span class="text-xs text-slate-500 uppercase font-bold tracking-widest block">Yardage</span>
+                    <span id="yardDisplay" class="scoreboard-font text-2xl md:text-3xl text-yellow-400 font-bold glow-yellow">0 YRD</span>
+                </div>
+            </div>
+
+            <!-- Goal Target Selector -->
+            <div class="flex items-center gap-2 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                <label for="targetSelect" class="text-xs text-slate-400 font-semibold uppercase">Goal Target:</label>
+                <select id="targetSelect" class="bg-slate-800 text-amber-400 font-bold text-sm rounded px-2 py-1 border border-slate-700 focus:outline-none focus:border-amber-500">
+                    <option value="10">10 Seconds (Drive)</option>
+                    <option value="30">30 Seconds (Half Drive)</option>
+                    <option value="60" selected>60 Seconds (Full Field)</option>
+                    <option value="120">2 Minutes (Drill)</option>
+                    <option value="300">5 Minutes (Period)</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Field Canvas Area -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-2 sm:p-4 flex flex-col justify-center items-center">
+        <!-- Canvas Container -->
+        <div class="w-full relative bg-slate-950 rounded-2xl p-2 sm:p-4 border-4 border-slate-800 shadow-2xl overflow-hidden">
+            <canvas id="footballCanvas" class="w-full h-auto rounded-xl shadow-inner cursor-pointer block"></canvas>
+
+            <!-- Touch Overlay prompt for quick start/pause -->
+            <div id="touchPrompt" class="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                <span class="bg-slate-900/90 text-amber-400 px-4 py-2 rounded-full border border-amber-500/40 text-sm font-semibold shadow-lg">
+                    Click Canvas to Play / Pause
+                </span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Controls & Touch Buttons -->
+    <footer class="w-full bg-slate-950 border-t border-slate-800 p-4">
+        <div class="max-w-4xl mx-auto flex flex-wrap justify-center items-center gap-4">
+            <!-- Start / Pause Button -->
+            <button id="startPauseBtn" class="flex-1 min-w-[140px] max-w-[200px] bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-lg">
+                <i id="startPauseIcon" class="fa-solid fa-play"></i>
+                <span id="startPauseText">START</span>
+            </button>
+
+            <!-- Lap / Yard Log Button -->
+            <button id="lapBtn" class="flex-1 min-w-[120px] max-w-[160px] bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-base">
+                <i class="fa-solid fa-flag"></i>
+                <span>FIRST DOWN</span>
+            </button>
+
+            <!-- Reset Button -->
+            <button id="resetBtn" class="flex-1 min-w-[120px] max-w-[160px] bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-base">
+                <i class="fa-solid fa-rotate-left"></i>
+                <span>RESET</span>
+            </button>
+        </div>
+
+        <!-- Lap History / Log Table -->
+        <div id="lapHistoryContainer" class="max-w-2xl mx-auto mt-4 hidden">
+            <h3 class="text-xs uppercase font-bold text-slate-400 mb-2 tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-list-check text-amber-500"></i> Down Marks / Laps
+            </h3>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl max-h-32 overflow-y-auto p-2">
+                <ul id="lapList" class="space-y-1 text-xs">
+                    <!-- Lap items added dynamically -->
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // State Management
+        let startTime = 0;
+        let elapsedTime = 0;
+        let timerInterval = null;
+        let isRunning = false;
+        let targetDurationSec = 60; // Default 60 seconds for full field
+        let laps = [];
+
+        // DOM Elements
+        const canvas = document.getElementById('footballCanvas');
+        const ctx = canvas.getContext('2d');
+        const digitalClock = document.getElementById('digitalClock');
+        const yardDisplay = document.getElementById('yardDisplay');
+        const startPauseBtn = document.getElementById('startPauseBtn');
+        const startPauseIcon = document.getElementById('startPauseIcon');
+        const startPauseText = document.getElementById('startPauseText');
+        const resetBtn = document.getElementById('resetBtn');
+        const lapBtn = document.getElementById('lapBtn');
+        const targetSelect = document.getElementById('targetSelect');
+        const lapHistoryContainer = document.getElementById('lapHistoryContainer');
+        const lapList = document.getElementById('lapList');
+
+        // Field Dimensions Configuration
+        const FIELD_ASPECT_RATIO = 2.1; // Width to Height ratio
+        let canvasWidth = 800;
+        let canvasHeight = 400;
+
+        // Visual Parameters
+        let ballX = 0;
+        let ballY = 0;
+        let targetX = 0;
+
+        // Initialize Canvas Size dynamically
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvasWidth = container.clientWidth - 32; // Account for padding
+            canvasHeight = Math.max(220, Math.min(canvasWidth / FIELD_ASPECT_RATIO, 420));
+
+            // Handle high DPI displays
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = canvasWidth * dpr;
+            canvas.height = canvasHeight * dpr;
+
+            ctx.scale(dpr, dpr);
+            drawField();
+        }
+
+        // Timer Controls
+        function startTimer() {
+            if (!isRunning) {
+                isRunning = true;
+                startTime = Date.now() - elapsedTime;
+                timerInterval = requestAnimationFrame(updateLoop);
+
+                // UI Updates
+                startPauseBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+                startPauseBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');
+                startPauseIcon.className = 'fa-solid fa-pause';
+                startPauseText.textContent = 'PAUSE';
+            }
+        }
+
+        function pauseTimer() {
+            if (isRunning) {
+                isRunning = false;
+                cancelAnimationFrame(timerInterval);
+
+                // UI Updates
+                startPauseBtn.classList.remove('bg-amber-600', 'hover:bg-amber-500');
+                startPauseBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+                startPauseIcon.className = 'fa-solid fa-play';
+                startPauseText.textContent = 'START';
+            }
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            elapsedTime = 0;
+            laps = [];
+            updateDisplay(0);
+            renderLapList();
+            drawField();
+        }
+
+        function toggleTimer() {
+            if (isRunning) {
+                pauseTimer();
+            } else {
+                startTimer();
+            }
+        }
+
+        function recordLap() {
+            if (elapsedTime === 0) return;
+
+            const yard = calculateYards(elapsedTime);
+            const timeStr = formatTime(elapsedTime);
+            laps.unshift({ id: laps.length + 1, time: timeStr, yard: yard });
+            renderLapList();
+        }
+
+        // Render Lap List UI
+        function renderLapList() {
+            if (laps.length === 0) {
+                lapHistoryContainer.classList.add('hidden');
+                lapList.innerHTML = '';
+                return;
+            }
+
+            lapHistoryContainer.classList.remove('hidden');
+            lapList.innerHTML = laps.map(lap => `
+                <li class="flex justify-between items-center bg-slate-800/60 px-3 py-1.5 rounded border border-slate-700/50">
+                    <span class="font-bold text-amber-400">Down ${lap.id}</span>
+                    <span class="text-slate-300 font-mono">${lap.time}</span>
+                    <span class="text-yellow-400 font-bold">${lap.yard} YRD Line</span>
+                </li>
+            `).join('');
+        }
+
+        // Core Update Loop
+        function updateLoop() {
+            if (!isRunning) return;
+
+            elapsedTime = Date.now() - startTime;
+            updateDisplay(elapsedTime);
+            drawField();
+
+            timerInterval = requestAnimationFrame(updateLoop);
+        }
+
+        // Format time in MM:SS.MS
+        function formatTime(ms) {
+            const minutes = Math.floor(ms / 60000);
+            const seconds = Math.floor((ms % 60000) / 1000);
+            const hundredths = Math.floor((ms % 1000) / 10);
+
+            const pad = (num) => num.toString().padStart(2, '0');
+            return `${pad(minutes)}:${pad(seconds)}.${pad(hundredths)}`;
+        }
+
+        // Calculate yard line based on elapsed time progress
+        function calculateYards(ms) {
+            const totalSeconds = ms / 1000;
+            const progress = Math.min(totalSeconds / targetDurationSec, 1.0);
+            // 0 to 100 yards
+            return Math.floor(progress * 100);
+        }
+
+        // Update Text Display Elements
+        function updateDisplay(ms) {
+            digitalClock.textContent = formatTime(ms);
+            const yards = calculateYards(ms);
+            yardDisplay.textContent = `${yards} YRD`;
+        }
+
+        // Drawing Functions (HTML5 Canvas Engine)
+        function drawField() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            const endzoneWidth = canvasWidth * 0.08;
+            const fieldWidth = canvasWidth - (endzoneWidth * 2);
+            const fieldHeight = canvasHeight;
+
+            // 1. Draw Field Turf Grass Stripes
+            const stripeCount = 10;
+            const stripeWidth = fieldWidth / stripeCount;
+
+            for (let i = 0; i < stripeCount; i++) {
+                ctx.fillStyle = (i % 2 === 0) ? '#15803d' : '#166534'; // Alternating green shades
+                ctx.fillRect(endzoneWidth + (i * stripeWidth), 0, stripeWidth, fieldHeight);
+            }
+
+            // 2. Draw Endzones
+            // Left Endzone (HOME)
+            ctx.fillStyle = '#b91c1c'; // Dark Red
+            ctx.fillRect(0, 0, endzoneWidth, fieldHeight);
+
+            // Right Endzone (AWAY)
+            ctx.fillStyle = '#1e40af'; // Dark Blue
+            ctx.fillRect(canvasWidth - endzoneWidth, 0, endzoneWidth, fieldHeight);
+
+            // Endzone Text
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.font = `900 ${Math.max(12, endzoneWidth * 0.35)}px Inter, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Left Endzone Text
+            ctx.translate(endzoneWidth / 2, fieldHeight / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('START', 0, 0);
+            ctx.restore();
+
+            // Right Endzone Text
+            ctx.save();
+            ctx.translate(canvasWidth - (endzoneWidth / 2), fieldHeight / 2);
+            ctx.rotate(Math.PI / 2);
+            ctx.fillText('GOAL', 0, 0);
+            ctx.restore();
+
+            // 3. Draw Boundary Lines
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(endzoneWidth, 0, fieldWidth, fieldHeight);
+
+            // 4. Draw Yard Lines and Numbers
+            const yardIntervals = 10; // Every 10 yards
+            const step = fieldWidth / yardIntervals;
+
+            for (let i = 0; i <= yardIntervals; i++) {
+                const x = endzoneWidth + (i * step);
+
+                // Main Yard Line
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, fieldHeight);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.lineWidth = (i === 5) ? 3 : 1.5; // Thicker 50 yard line
+                ctx.stroke();
+
+                // Draw Hash marks between lines
+                if (i < yardIntervals) {
+                    const subStep = step / 5;
+                    for (let j = 1; j < 5; j++) {
+                        const hashX = x + (j * subStep);
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                        ctx.lineWidth = 1;
+
+                        // Top hashes
+                        ctx.beginPath();
+                        ctx.moveTo(hashX, fieldHeight * 0.2);
+                        ctx.lineTo(hashX, fieldHeight * 0.23);
+                        ctx.stroke();
+
+                        // Bottom hashes
+                        ctx.beginPath();
+                        ctx.moveTo(hashX, fieldHeight * 0.8);
+                        ctx.lineTo(hashX, fieldHeight * 0.77);
+                        ctx.stroke();
+                    }
+                }
+
+                // Numbers (10, 20, 30, 40, 50, 40, 30, 20, 10)
+                if (i > 0 && i < yardIntervals) {
+                    const yardNum = (i <= 5) ? i * 10 : (10 - i) * 10;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                    ctx.font = `bold ${Math.max(10, canvasHeight * 0.05)}px Graduate, sans-serif`;
+                    ctx.textAlign = 'center';
+
+                    // Top Numbers
+                    ctx.fillText(yardNum.toString(), x, fieldHeight * 0.15);
+                    // Bottom Numbers
+                    ctx.fillText(yardNum.toString(), x, fieldHeight * 0.88);
+                }
+            }
+
+            // 5. Draw Goal Posts (Yellow)
+            drawGoalPost(endzoneWidth * 0.4, fieldHeight / 2);
+            drawGoalPost(canvasWidth - (endzoneWidth * 0.4), fieldHeight / 2, true);
+
+            // 6. Calculate Football Position
+            const totalSeconds = elapsedTime / 1000;
+            let progress = totalSeconds / targetDurationSec;
+
+            // Cap visual progress at 100% (or touchdown zone)
+            if (progress > 1.0) progress = 1.0;
+
+            const currentX = endzoneWidth + (progress * fieldWidth);
+            const currentY = fieldHeight / 2;
+
+            // Draw Yard/First Down markers logged
+            laps.forEach((lap, idx) => {
+                const lapYardPercent = Math.min(100, (lap.yard / 100));
+                const lapX = endzoneWidth + (lapYardPercent * fieldWidth);
+
+                ctx.fillStyle = '#f59e0b'; // Yellow marker line
+                ctx.fillRect(lapX - 1, 0, 3, fieldHeight);
+            });
+
+            // 7. Draw Football Asset at Current Progress
+            drawFootball(currentX, currentY);
+        }
+
+        // Draw Field Goal Post
+        function drawGoalPost(x, y, isRight = false) {
+            ctx.save();
+            ctx.strokeStyle = '#facc15'; // Bright yellow
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+
+            const postHeight = canvasHeight * 0.3;
+
+            // Base pole
+            ctx.beginPath();
+            ctx.moveTo(x, y - (postHeight / 2));
+            ctx.lineTo(x, y + (postHeight / 2));
+            ctx.stroke();
+
+            // Crossbar
+            ctx.beginPath();
+            const arm = isRight ? -15 : 15;
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + arm, y);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // Draw realistic Football SVG/Path on Canvas
+        function drawFootball(x, y) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            // Add slight bobbing / rotation movement if running
+            if (isRunning) {
+                const bounce = Math.sin(Date.now() / 150) * 4;
+                ctx.translate(0, bounce);
+            }
+
+            const ballWidth = Math.max(24, canvasWidth * 0.045);
+            const ballHeight = ballWidth * 0.6;
+
+            // Ball Shadow
+            ctx.beginPath();
+            ctx.ellipse(0, ballHeight * 0.8, ballWidth * 0.5, ballHeight * 0.3, 0, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fill();
+
+            // Main Ball Body (Leather Brown)
+            ctx.beginPath();
+            ctx.ellipse(0, 0, ballWidth * 0.5, ballHeight * 0.5, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#78350f'; // Rich leather brown
+            ctx.fill();
+            ctx.strokeStyle = '#451a03';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // White Stripes on Ends
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+
+            // Left Stripe
+            ctx.beginPath();
+            ctx.arc(-ballWidth * 0.25, 0, ballHeight * 0.35, -Math.PI / 3, Math.PI / 3);
+            ctx.stroke();
+
+            // Right Stripe
+            ctx.beginPath();
+            ctx.arc(ballWidth * 0.25, 0, ballHeight * 0.35, (2 * Math.PI) / 3, (4 * Math.PI) / 3);
+            ctx.stroke();
+
+            // Laces (White)
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            // Main horizontal lace line
+            ctx.beginPath();
+            ctx.moveTo(-ballWidth * 0.2, 0);
+            ctx.lineTo(ballWidth * 0.2, 0);
+            ctx.stroke();
+
+            // Vertical cross stitches
+            const stitches = 4;
+            const stitchStep = (ballWidth * 0.35) / stitches;
+            for (let i = 0; i <= stitches; i++) {
+                const stitchX = (-ballWidth * 0.175) + (i * stitchStep);
+                ctx.beginPath();
+                ctx.moveTo(stitchX, -ballHeight * 0.15);
+                ctx.lineTo(stitchX, ballHeight * 0.15);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // Event Listeners
+        startPauseBtn.addEventListener('click', toggleTimer);
+        resetBtn.addEventListener('click', resetTimer);
+        lapBtn.addEventListener('click', recordLap);
+
+        // Click on Canvas to Toggle Start/Pause
+        canvas.addEventListener('click', toggleTimer);
+
+        // Target Duration Select Handler
+        targetSelect.addEventListener('change', (e) => {
+            targetDurationSec = parseInt(e.target.value, 10);
+            drawField();
+        });
+
+        // Responsive handling
+        window.addEventListener('resize', resizeCanvas);
+
+        // Keyboard Shortcuts for Classroom Laptop usability
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); // Prevent scrolling page
+                toggleTimer();
+            } else if (e.code === 'KeyR') {
+                resetTimer();
+            } else if (e.code === 'KeyL' || e.code === 'Enter') {
+                recordLap();
+            }
+        });
+
+        // Initial Setup on Load
+        window.onload = function() {
+            resizeCanvas();
+            resetTimer();
+        };
+    </script>
+</body>
+</html>
