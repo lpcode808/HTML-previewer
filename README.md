@@ -47,6 +47,7 @@ To update the site later, push to the same branch. Pages redeploys on its own.
 | `tinker/` | Experimental knob layer over an HTML app. See [`tinker/README.md`](tinker/README.md) |
 | `tests/` | Optional browser tests (not needed to use or deploy the site) |
 | `FACILITATOR.md` | One-page guide for running a workshop |
+| `AGENTS.md` | Start here for AI coding agents working on this repo |
 | `TESTING.md` | Test results, review findings, and what's still unverified |
 
 ## How the preview works
