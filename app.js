@@ -436,6 +436,21 @@
         }
       } catch (e) { /* ignore */ }
       return found;
+    },
+    // Every version of the code that saved something in the preview leaves an entry
+    // behind. When storage is full, remove those entries one at a time (never the one
+    // for `keepCode`) and try again, so old preview data cannot stop the code being saved.
+    setMakingRoom: function (key, value, keepCode) {
+      var result = this.set(key, value);
+      if (result.reason !== 'quota') { return result; }
+      var keep = previewStorageKey(keepCode);
+      var old = this.keysStartingWith(KEYS.previewLs);
+      for (var i = 0; i < old.length && result.reason === 'quota'; i++) {
+        if (old[i] === key || old[i] === keep) { continue; }
+        this.remove(old[i]);
+        result = this.set(key, value);
+      }
+      return result;
     }
   };
 
@@ -488,7 +503,7 @@
       store.remove(previewStorageKey(code));
       return true;
     }
-    return store.set(previewStorageKey(code), json).ok;
+    return store.setMakingRoom(previewStorageKey(code), json, code).ok;
   }
 
   function flushPreviewStorage() {
@@ -814,7 +829,7 @@
       setSaveState('error', 'other-tab');
       return false;
     }
-    var result = store.set(KEYS.code, editor.value);
+    var result = store.setMakingRoom(KEYS.code, editor.value, editor.value);
     state.saveFailed = !result.ok;
     if (result.ok) {
       lastSaveProblem = null;
@@ -862,8 +877,14 @@
 
   // Adds the helper script right after the doctype (or at the very start), on the
   // same line, so the line numbers of the pasted code are unchanged.
+  // JSON placed inside a <script> tag. "<" is escaped so that saved text such as
+  // "</script>" or "<!--" cannot end the tag early or change how it is read.
+  function scriptJson(value) {
+    return JSON.stringify(value).replace(/</g, '\\u003c');
+  }
+
   function buildPreviewDocument(code, runId, previewSeed) {
-    var helper = '<script>(' + HELPER_SOURCE + ')(' + JSON.stringify(runId) + ',' + JSON.stringify(previewSeed || null) + ');<\/script>';
+    var helper = '<script>(' + HELPER_SOURCE + ')(' + scriptJson(runId) + ',' + scriptJson(previewSeed || null) + ');<\/script>';
     var at = doctypeEnd(code);
     if (at > 0) {
       return code.slice(0, at) + helper + code.slice(at);

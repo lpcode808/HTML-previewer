@@ -39,12 +39,14 @@ The suite starts a plain static file server for the repository, as GitHub Pages 
 | 9e | Paste button | Reads the clipboard, replaces the code, and offers Undo. | Pass |
 | 9g | Paste without clipboard permission | The Paste button shows a plain-language message to use Ctrl/⌘+V (or tap-and-hold on a phone). The editor stays unchanged. | Pass |
 | 9h | Preview `localStorage` | Data survives a full page reload and **Restart** (including a creation that saves 150 times per run), stays separate from the playground's own storage keys, and **Clear preview data** resets it. | Pass |
+| 9l | Saved text that looks like HTML | A creation that saves text containing `</script>` or `<!--<script>` still runs after **Restart**, gets the text back unchanged, and the text never becomes page content. | Pass |
+| 9m | Storage full of old preview data | When data saved by older versions of a creation fills the site's storage, the playground removes that old data so the code still saves. | Pass |
 | 9i | Blocked downloads | A programmatic in-preview download shows a bold banner above the preview frame before the toast, plus a toast pointing people to **Download**. | Pass |
 | 9j | Gemini chat prose | Pasting chat prose (no HTML) shows the Canvas-specific hint; CSS-only paste keeps the generic non-HTML message. | Pass |
 | 9k | iOS paste hint | With an iPhone user agent, hints appear near **Paste** and in Help. | Pass |
 | 10 | Static hosting | Works from a plain static server **and** straight from disk (`file://`). No server logic is used. | Pass |
 
-Each new reliability test (7d, 7e and 7f) was also run against the code from before its fix, and each one failed there. They are real regression tests.
+Each new reliability test (7d, 7e, 7f, 9l and 9m) was also run against the code from before its fix, and each one failed there. They are real regression tests.
 
 ## Evaluation passes and what changed
 

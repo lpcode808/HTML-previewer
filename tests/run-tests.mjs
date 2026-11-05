@@ -884,6 +884,49 @@ await test('9h. Preview localStorage survives reload and Restart; cannot read pl
   await context.close();
 });
 
+await test('9l. Saved preview data containing "</script>" or "<!--" cannot break the preview', async () => {
+  const { context, page } = await openApp();
+  // A notes app that saves HTML: the saved text goes back into the preview on the next run.
+  const doc = `<!DOCTYPE html><html><body><p id="out">empty</p>
+<script>
+  var v = localStorage.getItem('note');
+  document.getElementById('out').textContent = v === null ? 'first' : 'kept ' + v.length;
+  localStorage.setItem('note', '</scr' + 'ipt><h1 id="leak">x</h1><!--<scr' + 'ipt>');
+<\/script></body></html>`;
+  await setCode(page, doc);
+  let frame = await previewFrame(page);
+  await frame.waitForFunction(() => document.getElementById('out').textContent === 'first');
+  await wait(600);  // let the batched save land
+  const before = await runs(page);
+  await page.click('#runBtn');
+  frame = await previewFrame(page, 5000, before);
+  await frame.waitForFunction(() => document.getElementById('out').textContent !== 'empty', null, { timeout: 3000 })
+    .catch(() => { throw new Error('the creation did not run after Restart'); });
+  assert(await frame.textContent('#out') === 'kept 41', 'saved text comes back unchanged: ' + await frame.textContent('#out'));
+  assert(!(await frame.$('h1')), 'saved text was not turned into page content');
+  await context.close();
+});
+
+await test('9m. Old preview data filling storage does not stop the code being saved', async () => {
+  const { context, page } = await openApp();
+  // Fill this site's storage with data saved by many old versions of a creation.
+  const filled = await page.evaluate(() => {
+    const prefix = 'html-playground:v1:' + location.pathname.replace(/[^\/]*$/, '') + ':preview-ls:old';
+    let n = 0;
+    for (let size = 1000000; size >= 1000;) {
+      try { localStorage.setItem(prefix + n, JSON.stringify({ k: 'x'.repeat(size) })); n += 1; } catch (e) { size = Math.floor(size / 2); }
+    }
+    return n;
+  });
+  assert(filled > 3, 'storage filled with old preview data: ' + filled);
+  const code = '<!DOCTYPE html><p>a big app</p><!--' + 'y'.repeat(200000) + '-->\n';
+  await setCode(page, code);
+  await wait(800);
+  assert(await savedCode(page) === code, 'the code was saved');
+  assert(/^Saved/.test(await page.textContent('#saveStatus')), 'status says saved: ' + await page.textContent('#saveStatus'));
+  await context.close();
+});
+
 await test('9i. In-preview download attempt shows a notice', async () => {
   const { context, page } = await openApp();
   const whenBanner = page.evaluate(() => new Promise((resolve) => {

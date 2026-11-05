@@ -243,9 +243,12 @@ $('changesBtn').onclick = () => { $('changes').textContent = changesText(); $('c
 $('closeBtn').onclick = () => $('changesDlg').close();
 $('copyBtn').onclick = () => navigator.clipboard?.writeText(changesText());
 $('downloadBtn').onclick = () => {
+  // octet-stream, not text/html: a browser that ignored `download` would otherwise open the
+  // app as a page on this site's origin, outside the sandbox (same as the playground's Download).
+  const url = URL.createObjectURL(new Blob([build()], { type: 'application/octet-stream' }));
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([build()], { type: 'text/html' }));
-  a.download = 'my-tinkered-app.html'; a.click();
+  a.href = url; a.download = 'my-tinkered-app.html'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 };
 
 if (EXAMPLE) load(EXAMPLE.code, EXAMPLE.knobs); else $('editDlg').showModal();
