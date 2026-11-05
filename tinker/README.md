@@ -5,8 +5,8 @@ value on one real line of her code**, with that line shown and the value highlig
 
 The work is split in two:
 
-- **The model does the reasoning.** You (the teacher) paste [`PROMPT.md`](PROMPT.md) and a student's
-  HTML into whichever model you like. It answers with a short knob list (JSON). It never reprints her
+- **The model does the reasoning.** You (the teacher) paste the **Tinker knobs** prompt from the
+  [prompt kit](../prompts.html#tinker) and a student's HTML into whichever model you like. It answers with a short knob list (JSON). It never reprints her
   app, so there's no truncation and no silent rewrite.
 - **This page does the dependable part.** It finds each quoted snippet in her file, skips any that
   aren't there exactly once (marked in red, and the app still runs), and rebuilds the preview from
@@ -15,7 +15,7 @@ The work is split in two:
 
 ## Making one to hand out
 
-1. Run `PROMPT.md` + her HTML through a model. Save its answer as-is (a sentence before it or code
+1. Run the Tinker knobs prompt + her HTML through a model. Save its answer as-is (a sentence before it or code
    fences around it are fine), e.g. `knobs.txt`.
 2. Run:
 
@@ -48,5 +48,5 @@ the knobs are meant to raise ("I changed it and nothing happened. Why?").
 
 ## Not tested yet
 
-How well a given model follows `PROMPT.md` (exact snippets, unique, JSON only). The build report
+How well a given model follows the prompt (exact snippets, unique, JSON only). The build report
 shows this for each run. The example knob list was written by hand to match the prompt.

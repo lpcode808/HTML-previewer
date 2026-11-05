@@ -43,6 +43,8 @@ To update the site later, push to the same branch. Pages redeploys on its own.
 | `styles.css` | All styling (light/dark, desktop/phone layouts) |
 | `app.js` | All behavior. Vanilla JavaScript with no dependencies. The sample project lives at the top. |
 | `.nojekyll` | Tells GitHub Pages to serve the files as-is |
+| `prompts.html` | Prompt kit (linked quietly from the footer): copyable prompts for a learning guide and tinker knobs. Experimental |
+| `tinker/` | Experimental knob layer over an HTML app. See [`tinker/README.md`](tinker/README.md) |
 | `tests/` | Optional browser tests (not needed to use or deploy the site) |
 | `FACILITATOR.md` | One-page guide for running a workshop |
 | `TESTING.md` | Test results, review findings, and what's still unverified |

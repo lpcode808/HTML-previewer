@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Prompts that turn an HTML app into something to learn from. Paste one into whatever AI you use.">
+  <meta name="color-scheme" content="light dark">
+  <title>Prompt Kit · HTML Playground</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M12 10l-6 6 6 6M20 10l6 6-6 6' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <style>
+    /* Same tokens as styles.css, kept separate so the playground's layout rules don't apply here. */
+    :root {
+      --bg: #f4f5fa; --surface: #ffffff; --surface-2: #f8f9fc; --border: #d9dce6;
+      --text: #1c2030; --text-muted: #555c70; --primary: #4338ca; --primary-hover: #3730a3;
+      --primary-soft: #eef0ff; --ok: #157a3c; --link: #4338ca;
+      --shadow: 0 1px 2px rgba(20, 24, 40, 0.06), 0 2px 8px rgba(20, 24, 40, 0.06);
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14161f; --surface: #1c1f2b; --surface-2: #222636; --border: #343a4f;
+        --text: #eceef6; --text-muted: #a9afc4; --primary: #5b54e8; --primary-hover: #4c45d6;
+        --primary-soft: #2a2b4d; --ok: #5fd28d; --link: #8ab4ff;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.25);
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 var(--font); }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 20px 16px 56px; }
+    a { color: var(--link); text-underline-offset: 2px; }
+    .back { font-size: 0.92rem; }
+    h1 { font-size: 1.6rem; margin: 18px 0 4px; }
+    .lede { color: var(--text-muted); margin: 0 0 8px; }
+    .steps { margin: 0 0 24px; padding-left: 1.2em; color: var(--text-muted); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: var(--shadow); padding: 18px 18px 14px; margin-bottom: 20px; }
+    .card h2 { font-size: 1.2rem; margin: 0 0 2px; }
+    .tag { display: inline-block; font-size: 0.75rem; font-weight: 600; color: var(--primary);
+      background: var(--primary-soft); border-radius: 999px; padding: 1px 9px; margin-left: 6px;
+      vertical-align: 2px; }
+    .card p, .card li { margin: 6px 0; }
+    .card ul { padding-left: 1.2em; margin: 6px 0 10px; }
+    .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0 8px; }
+    button { font: inherit; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer;
+      border: 1px solid var(--primary); background: var(--primary); color: #fff; }
+    button:hover { background: var(--primary-hover); }
+    .copied { color: var(--ok); font-size: 0.92rem; }
+    details summary { cursor: pointer; color: var(--text-muted); font-size: 0.92rem; }
+    pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px; margin: 8px 0 0; max-height: 340px; overflow: auto; white-space: pre-wrap;
+      font: 0.82rem/1.5 var(--mono); }
+    .note { color: var(--text-muted); font-size: 0.92rem; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← HTML Playground</a>
+  <h1>Prompt kit</h1>
+  <p class="lede">Prompts that turn an HTML app into something to learn from. They work with whatever
+    AI you use (Gemini, ChatGPT, Claude, and others).</p>
+  <ol class="steps">
+    <li>Copy a prompt.</li>
+    <li>Paste it into your AI, then paste the app's whole HTML file underneath it.</li>
+    <li>Check the answer before handing it out. The tips under each prompt say what to look for.</li>
+  </ol>
+
+  <section class="card" id="guide">
+    <h2>Learning guide <span class="tag">experimental</span></h2>
+    <p>A one-page guide to one app: what each part does, the real line of code behind it, and
+      "predict, then try" tasks that have the student change a value and guess what happens first.</p>
+    <ul>
+      <li><strong>You get:</strong> a single HTML file. Paste it into the <a href="index.html">Playground</a>,
+        read it there, then use <strong>Download</strong> to hand it out.</li>
+      <li><strong>Check:</strong> search the app for each quoted line (Ctrl+F or ⌘F). If one isn't
+        there, the AI made it up. Fix it or delete it.</li>
+      <li><strong>Answers:</strong> the AI lists what should happen for each "predict, then try"
+        <em>after</em> the HTML, in its chat reply, so the answers aren't in the hand-out.</li>
+    </ul>
+    <div class="bar">
+      <button type="button" data-copy="p-guide">Copy prompt</button>
+      <span class="copied" role="status" aria-live="polite"></span>
+    </div>
+    <details>
+      <summary>Read the prompt</summary>
+      <pre id="p-guide">You are writing a one-page learning guide about an app a student made with AI. The student did not write the code line by line. The goal is for them to understand their own app well enough to explain it and change it.
+
+Do NOT rewrite, fix, or reprint the app.
+
+Make the guide one complete HTML file, with its CSS inside it and no links to other files. It should be easy to read on a laptop and print cleanly.
+
+Include these sections, in this order:
+
+1. What makes this app different. One or two sentences about what this app does that other apps like it don't. Start with that.
+
+2. The parts. Pick 3 to 6 parts of the app: things you can see on screen, and what happens behind them. For each part:
+   - One or two plain sentences about what it does.
+   - The line of code that does it, copied EXACTLY from the file, character for character, in a code box. Never make up, shorten, or tidy a quote. If you are not sure of the exact text, leave the quote out.
+   - "Predict, then try": name one value on that line and what to change it to. Ask the student to write down what they think will happen BEFORE they try it. Do not say what will happen.
+
+3. Look closely. If something in the code looks odd, unused, or might not do what it seems to, point to it as a question, not an answer. If nothing does, leave this section out.
+
+4. Big ideas. For each of these, point to one place in the code, with one sentence and the quoted line: decomposition (breaking a problem into parts), pattern (something that repeats), abstraction (a name that hides details), algorithm (steps in order).
+
+5. Explain it out loud. Three questions the student could answer in a one-minute talk about their app.
+
+Writing rules: talk to the student ("your app"). Use plain words and short sentences. Explain any code word the first time you use it. Never say "just", "simply", or "easy".
+
+After the HTML file, OUTSIDE it, write a short list for the teacher: for each "predict, then try", what should happen.
+
+Here is the app:</pre>
+    </details>
+  </section>
+
+  <section class="card" id="tinker">
+    <h2>Tinker knobs <span class="tag">experimental</span></h2>
+    <p>Sliders, color pickers and text boxes that each change one value on one real line of the
+      app, with that line shown as it changes. <a href="tinker/index.html">See an example</a>.</p>
+    <ul>
+      <li><strong>You get:</strong> a short knob list. Paste it with the app into the
+        <a href="tinker/template.html">tinker page</a>, or bake one file to hand out with
+        <code>tinker/build.py</code> (see the <a href="tinker/README.md">tinker README</a>).</li>
+      <li><strong>Check:</strong> knobs whose code isn't in the app turn red and are skipped. The
+        app still runs. A few red knobs are fine. Mostly red means try another AI.</li>
+    </ul>
+    <div class="bar">
+      <button type="button" data-copy="p-tinker">Copy prompt</button>
+      <span class="copied" role="status" aria-live="polite"></span>
+    </div>
+    <details>
+      <summary>Read the prompt</summary>
+      <pre id="p-tinker">You are helping a student tinker with an app they made. Do NOT rewrite, fix, or reprint the app.
+Your only job is to find 5 to 8 "knobs": single values in the code that the student can change and SEE
+change right away (colors, sizes, speeds, counts, words on screen).
+
+Rules for every knob:
+1. "code" is a short piece of text copied EXACTLY, character for character, from ONE line of the
+   file. It must appear only ONCE in the whole file. Use the shortest piece that is still unique.
+2. "value" is the exact part of "code" that will change. It must appear inside "code".
+3. Two knobs must never change the same characters.
+4. "type" is "number", "color" (only 6-digit hex like #1e40af), or "text".
+5. For numbers, give "min", "max", and "step" that keep the app working but let the student push it.
+6. "label" is 2 to 5 plain words the student would use ("Home end zone color", not "fillStyle").
+7. "why" is one sentence, under 25 words, saying what this value controls. If changing it has
+   a surprise (something else does NOT change with it), say so. Never say "just" or "easy".
+8. Put first the knobs for what makes THIS app different from every other app like it.
+
+Answer with ONLY this JSON, no other words:
+{
+  "app": "name of the app",
+  "knobs": [
+    { "label": "", "code": "", "value": "", "type": "number", "min": 0, "max": 0, "step": 1, "why": "" }
+  ]
+}
+
+Here is the app:</pre>
+    </details>
+  </section>
+
+  <p class="note">Both prompts are drafts and get changed as they're tried in class. Nothing on this
+    page is sent anywhere. Copying a prompt only puts it on your clipboard.</p>
+</div>
+
+<script>
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall through */ }
+    const t = document.createElement('textarea');
+    t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.append(t); t.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    t.remove(); return ok;
+  }
+  document.querySelectorAll('[data-copy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const text = document.getElementById(btn.dataset.copy).textContent.trim() + '\n\n';
+      const status = btn.parentElement.querySelector('.copied');
+      status.textContent = (await copyText(text))
+        ? 'Copied. Paste it into your AI, then paste the app underneath.'
+        : 'Copy didn’t work here. Open “Read the prompt” and select the text.';
+    });
+  });
+</script>
+</body>
+</html>

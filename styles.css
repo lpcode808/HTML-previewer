@@ -191,6 +191,10 @@ code {
 .link-btn:hover { color: var(--primary-hover); }
 @media (prefers-color-scheme: dark) { .link-btn { color: var(--focus); } }
 
+/* The footer's way to the prompt kit: there for whoever looks, not competing with the playground. */
+.footnote-quiet { color: inherit; text-decoration: none; opacity: 0.8; }
+.footnote-quiet:hover, .footnote-quiet:focus-visible { text-decoration: underline; text-underline-offset: 2px; opacity: 1; }
+
 /* ---------- Switch (checkbox) ---------- */
 
 .switch {
