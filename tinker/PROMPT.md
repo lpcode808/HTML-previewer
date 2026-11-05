@@ -1,7 +1,7 @@
 # Tinker prompt
 
-Copy everything in the box, paste it into any AI chat (Gemini, ChatGPT, Claude…), then paste your
-whole HTML file underneath it. Copy the AI's answer into the **Knobs** box in the Tinker page.
+Copy everything in the box, paste it into any AI chat (Gemini, ChatGPT, Claude…), then paste the
+whole HTML file underneath it. Save the answer and run `build.py` (see README), or paste it into the **Knobs** box in `template.html`.
 
 ```text
 You are helping a student tinker with an app she made. Do NOT rewrite, fix, or reprint her app.
